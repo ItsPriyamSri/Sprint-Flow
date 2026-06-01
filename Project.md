@@ -66,6 +66,11 @@ Users should be able to upload the current Excel workbook and immediately see a 
 
 The platform should be designed for future scalability and future company-wide adoption.
 
+**Key Destination Goal:** The platform must serve as a comprehensive planning and execution destination, allowing teams to completely transition from Excel to our interactive UI at any stage of project planning or execution (from kickoff/backlog to sprint completion).
+
+**Complete Workbook Parsing:** The import pipeline must parse and import both the active sprint list (`Master Task List`) and the deferred backlog tab (`Deferred Backlog`) to ensure no planning data is lost during transition.
+
+
 ---
 
 # EXISTING EXCEL WORKBOOK STRUCTURE

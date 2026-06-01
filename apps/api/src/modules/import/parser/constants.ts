@@ -11,7 +11,7 @@ export const FIELD_PATTERNS: Array<{ field: string; patterns: string[] }> = [
   { field: 'hoursI',      patterns: ['hrsi', 'hoursi', 'hoursincurred', 'actual', 'spent', 'incurred'] },
   { field: 'hoursTotal',  patterns: ['total', 'totalhours', 'totalhrs', 'hrs'] },
   { field: 'priority',    patterns: ['priority', 'prio', 'importance', 'urgency'] },
-  { field: 'notes',       patterns: ['notes', 'note', 'comments', 'comment', 'remarks'] },
+  { field: 'notes',       patterns: ['notes', 'note', 'comments', 'comment', 'remarks', 'deferred'] },
   { field: 'status',      patterns: ['status', 'state', 'stage', 'phase'] },
 ];
 

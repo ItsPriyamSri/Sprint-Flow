@@ -1,13 +1,7 @@
 import { apiFetch } from './client';
+import type { SprintDto } from '@sprintflow/shared';
 
-export interface SprintDto {
-  id: string;
-  name: string;
-  status: 'PLANNING' | 'ACTIVE' | 'COMPLETED';
-  startDate: string | null;
-  endDate: string | null;
-  position: number;
-}
+export type { SprintDto };
 
 export async function listSprints(workspaceId: string) {
   return apiFetch<{ data: SprintDto[] }>(`/sprints?workspaceId=${workspaceId}`);
@@ -23,7 +17,7 @@ export async function createSprint(workspaceId: string, name: string) {
 export async function updateSprint(
   sprintId: string,
   workspaceId: string,
-  patch: Partial<Pick<SprintDto, 'name' | 'status' | 'startDate' | 'endDate'>>,
+  patch: Partial<Omit<SprintDto, 'id' | 'position' | 'projectId'>>,
 ) {
   return apiFetch<SprintDto>(`/sprints/${sprintId}?workspaceId=${workspaceId}`, {
     method: 'PATCH',

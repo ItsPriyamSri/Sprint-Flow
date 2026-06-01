@@ -435,6 +435,48 @@ projectsRouter.patch(
   },
 );
 
+// ── Update project epic ────────────────────────────────────────────────────────
+projectsRouter.patch(
+  '/:projectId/epics/:epicId',
+  validate(z.object({
+    name: z.string().min(1).max(200).optional(),
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { projectId, epicId } = req.params as { projectId: string; epicId: string };
+      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!project) throw new NotFoundError('Project');
+
+      const epic = await prisma.epic.findFirst({ where: { id: epicId, projectId } });
+      if (!epic) throw new NotFoundError('Epic');
+
+      const body = req.body as { name?: string; color?: string };
+
+      if (body.name) {
+        const existing = await prisma.epic.findFirst({
+          where: { workspaceId: project.workspaceId, name: body.name, id: { not: epicId } },
+        });
+        if (existing) {
+          throw new AppError('BAD_REQUEST', 'An epic with this name already exists in the workspace', 400);
+        }
+      }
+
+      const updated = await prisma.epic.update({
+        where: { id: epicId },
+        data: {
+          ...(body.name !== undefined && { name: body.name }),
+          ...(body.color !== undefined && { color: body.color }),
+        },
+      });
+
+      res.json({ id: updated.id, name: updated.name, color: updated.color, projectId: updated.projectId });
+    } catch (e) { next(e); }
+  },
+);
+
+
 // ── My Work endpoint ──────────────────────────────────────────────────────────
 // GET /projects/:projectId/my-work — assignments + dynamic day targets for current user
 projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, next: NextFunction) => {

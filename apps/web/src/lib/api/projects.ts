@@ -73,3 +73,14 @@ export async function getTeamView(projectId: string): Promise<TeamViewDto> {
 export async function getBacklog(projectId: string): Promise<{ data: import('@sprintflow/shared').SprintTaskDto[] }> {
   return apiFetch(`/projects/${projectId}/backlog`);
 }
+
+export async function updateEpic(
+  projectId: string,
+  epicId: string,
+  patch: { name?: string; color?: string },
+): Promise<{ id: string; name: string; color: string | null; projectId: string | null }> {
+  return apiFetch(`/projects/${projectId}/epics/${epicId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}

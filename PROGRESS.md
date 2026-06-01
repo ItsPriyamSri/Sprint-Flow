@@ -1,8 +1,8 @@
 # SprintFlow — Build Progress & Handoff
 
 **Last updated:** 2026-06-01  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · **6 (Scrum platform)**  
-**Status:** Scrum planning pivot shipped; import → main dashboard linkage hardened. See AI_ROADMAP.md for AI work.  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · **7 (Dashboard Customization & Backlog Import)**  
+**Status:** Scrum planning pivot shipped; dashboard inline-editing & multi-sheet backlog import fully implemented. See AI_ROADMAP.md for AI work.  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
 
 ---
@@ -39,10 +39,30 @@
 
 ### Known follow-ups (not blocking)
 
-- Multi-sheet Excel importer  
+- Multi-sheet Excel importer (Shipped in Phase 7)
 - My Work requires `TaskAssignment` rows (owner must match `ProjectMember`)  
 - Onboarding “add member” needs invite-by-email or workspace member picker only  
 - Flow toggle embedded in sprint board (Flow is a separate route today)
+
+---
+
+## Phase 7 — Dashboard Customization & Backlog Import (2026-06-01)
+
+### What was built
+
+| Area | Detail |
+|---|---|
+| **API** | `PATCH /projects/:projectId/epics/:epicId` to support inline epic renaming and color picking. |
+| **Excel Importer** | Multi-sheet parsing supporting both `📊 Master Task List` and `🔕 Deferred Backlog` tabs; automatically matches and parses backlog stories, marking them as deferred with notes/reasons. |
+| **Dashboard Inline Editing** | Click-to-edit for Sprint details (name, goal, status, dates, working days, release milestone details), double-click to rename task titles inline, click-to-select priority dropdown, and inline capacity editing (`hoursPerDay`) in the Team Workload table. |
+| **Interactive Owner Chips** | Assignee chips are clickable, displaying popovers to adjust hours, change assignee, or remove assignments, along with inline quick-add assignment indicators. |
+| **Microinteractions & Polish** | Added transition scale animations, green flash/tactile click animations on done checkbox toggle, and crimson warning pulses on overloaded project members. |
+
+### Verification (2026-06-01)
+
+- `pnpm exec tsc --noEmit -p apps/api` — pass
+- `pnpm exec tsc --noEmit -p apps/web` — pass
+- Manual confirmation: Uploaded workbook -> preview stats correctly counted 51 rows (45 active + 6 deferred) -> verified backlog tab is populated.
 
 ---
 

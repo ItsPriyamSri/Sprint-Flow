@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { detectSheet, detectHeaderRow, type ColumnInfo } from './detect';
+import { detectSheet, detectHeaderRow, type ColumnInfo, normalizeStr } from './detect';
 import { extractRawRow, normalizeRow, validateRow, type ValidatedRow } from './normalize';
 import { AppError } from '../../../lib/errors';
 
@@ -65,6 +65,64 @@ function enforceSheetLimits(sheet: XLSX.WorkSheet, sheetName: string): void {
   }
 }
 
+function detectBacklogSheet(workbook: XLSX.WorkBook): string | null {
+  for (const name of workbook.SheetNames) {
+    const norm = normalizeStr(name);
+    if (norm === 'deferredbacklog' || norm === 'backlog' || norm.includes('backlog') || norm.includes('deferred')) {
+      return name;
+    }
+  }
+  return null;
+}
+
+function parseSheetRows(
+  sheet: XLSX.WorkSheet,
+  headerRowIndex: number,
+  columns: ColumnInfo[],
+  seenExternalIds: Set<string>,
+  rows: ValidatedRow[],
+  stats: ParseResult['stats'],
+  isDeferredSheet: boolean,
+) {
+  const ref = sheet['!ref'];
+  if (!ref) return;
+
+  const range = XLSX.utils.decode_range(ref);
+
+  for (let r = headerRowIndex + 1; r <= range.e.r; r++) {
+    const raw = extractRawRow(sheet, r, columns);
+    const norm = normalizeRow(raw);
+
+    // Skip fully empty rows
+    const allNull = Object.values(raw.cells).every((v) => !v);
+    if (allNull) continue;
+
+    if (isDeferredSheet) {
+      // Force status to "deferred" and column to "backlog" for deferred backlog tab rows
+      norm.rawStatus = 'deferred';
+      norm.columnKey = 'backlog';
+    }
+
+    const validated = validateRow(raw, norm, seenExternalIds);
+
+    rows.push(validated);
+    stats.total++;
+
+    switch (validated.status) {
+      case 'VALID':    stats.valid++;    break;
+      case 'WARNING':  stats.warnings++; break;
+      case 'ERROR':    stats.errors++;   break;
+      case 'SKIPPED':  stats.skipped++;  break;
+    }
+
+    if (validated.status !== 'SKIPPED') {
+      if (norm.sprintName) stats.sprints.add(norm.sprintName);
+      if (norm.epicName)   stats.epics.add(norm.epicName);
+      if (norm.ownerName)  stats.owners.add(norm.ownerName);
+    }
+  }
+}
+
 export function parseWorkbook(buffer: Buffer, filename: string): ParseResult {
   const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
   validateMagicBytes(buffer, ext);
@@ -98,12 +156,7 @@ export function parseWorkbook(buffer: Buffer, filename: string): ParseResult {
   const columnMap: Record<string, string> = {};
   for (const col of columns) columnMap[col.header] = col.field;
 
-  const ref = sheet['!ref'];
-  if (!ref) return emptyResult(sheetName, headerRowIndex, columns, columnMap);
-
-  const range = XLSX.utils.decode_range(ref);
   const seenExternalIds = new Set<string>();
-
   const rows: ValidatedRow[] = [];
   const stats = {
     total: 0,
@@ -116,25 +169,25 @@ export function parseWorkbook(buffer: Buffer, filename: string): ParseResult {
     owners: new Set<string>(),
   };
 
-  for (let r = headerRowIndex + 1; r <= range.e.r; r++) {
-    const raw = extractRawRow(sheet, r, columns);
-    const norm = normalizeRow(raw);
-    const validated = validateRow(raw, norm, seenExternalIds);
+  // 1. Parse main sprint plan sheet
+  parseSheetRows(sheet, headerRowIndex, columns, seenExternalIds, rows, stats, false);
 
-    rows.push(validated);
-    stats.total++;
-
-    switch (validated.status) {
-      case 'VALID':    stats.valid++;    break;
-      case 'WARNING':  stats.warnings++; break;
-      case 'ERROR':    stats.errors++;   break;
-      case 'SKIPPED':  stats.skipped++;  break;
-    }
-
-    if (validated.status !== 'SKIPPED') {
-      if (norm.sprintName) stats.sprints.add(norm.sprintName);
-      if (norm.epicName)   stats.epics.add(norm.epicName);
-      if (norm.ownerName)  stats.owners.add(norm.ownerName);
+  // 2. Parse backlog sheet if it exists
+  const backlogSheetName = detectBacklogSheet(workbook);
+  if (backlogSheetName && backlogSheetName !== sheetName) {
+    const backlogSheet = workbook.Sheets[backlogSheetName]!;
+    enforceSheetLimits(backlogSheet, backlogSheetName);
+    const backlogHeaderResult = detectHeaderRow(backlogSheet);
+    if (backlogHeaderResult) {
+      parseSheetRows(
+        backlogSheet,
+        backlogHeaderResult.headerRowIndex,
+        backlogHeaderResult.columns,
+        seenExternalIds,
+        rows,
+        stats,
+        true,
+      );
     }
   }
 
@@ -188,10 +241,6 @@ export function reparse(
     field: overrideColumnMap[col.header] ?? col.field,
   }));
 
-  const ref = sheet['!ref'];
-  if (!ref) return emptyResult(sheetName, headerResult.headerRowIndex, updatedColumns, overrideColumnMap);
-
-  const range = XLSX.utils.decode_range(ref);
   const seenExternalIds = new Set<string>();
   const rows: ValidatedRow[] = [];
   const stats = {
@@ -199,22 +248,25 @@ export function reparse(
     sprints: new Set<string>(), epics: new Set<string>(), owners: new Set<string>(),
   };
 
-  for (let r = headerResult.headerRowIndex + 1; r <= range.e.r; r++) {
-    const raw = extractRawRow(sheet, r, updatedColumns);
-    const norm = normalizeRow(raw);
-    const validated = validateRow(raw, norm, seenExternalIds);
-    rows.push(validated);
-    stats.total++;
-    switch (validated.status) {
-      case 'VALID':   stats.valid++;    break;
-      case 'WARNING': stats.warnings++; break;
-      case 'ERROR':   stats.errors++;   break;
-      case 'SKIPPED': stats.skipped++;  break;
-    }
-    if (validated.status !== 'SKIPPED') {
-      if (norm.sprintName) stats.sprints.add(norm.sprintName);
-      if (norm.epicName)   stats.epics.add(norm.epicName);
-      if (norm.ownerName)  stats.owners.add(norm.ownerName);
+  // 1. Parse main sprint plan sheet
+  parseSheetRows(sheet, headerResult.headerRowIndex, updatedColumns, seenExternalIds, rows, stats, false);
+
+  // 2. Parse backlog sheet if it exists
+  const backlogSheetName = detectBacklogSheet(workbook);
+  if (backlogSheetName && backlogSheetName !== sheetName) {
+    const backlogSheet = workbook.Sheets[backlogSheetName]!;
+    enforceSheetLimits(backlogSheet, backlogSheetName);
+    const backlogHeaderResult = detectHeaderRow(backlogSheet);
+    if (backlogHeaderResult) {
+      parseSheetRows(
+        backlogSheet,
+        backlogHeaderResult.headerRowIndex,
+        backlogHeaderResult.columns,
+        seenExternalIds,
+        rows,
+        stats,
+        true,
+      );
     }
   }
 
