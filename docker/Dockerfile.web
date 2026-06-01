@@ -1,0 +1,48 @@
+# ── Build stage ──────────────────────────────────────────────
+FROM node:22-alpine AS builder
+WORKDIR /app
+
+RUN npm install -g pnpm@9
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/ui/package.json ./packages/ui/
+COPY apps/web/package.json ./apps/web/
+
+RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+
+COPY packages/shared ./packages/shared
+COPY packages/ui ./packages/ui
+COPY apps/web ./apps/web
+COPY tsconfig.base.json ./
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN pnpm --filter @sprintflow/web build
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
+FROM node:22-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+
+# public/ dir (may be empty, .gitkeep ensures it exists in source)
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+
+# Standalone bundle — outputFileTracingRoot=monorepo-root means server.js
+# is at the root of the standalone directory (not nested under apps/web/)
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+
+# Static assets must be placed alongside where the standalone server expects them
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+
+USER nextjs
+EXPOSE 3000
+
+# The standalone server entry point emitted by Next.js with outputFileTracingRoot
+CMD ["node", "apps/web/server.js"]

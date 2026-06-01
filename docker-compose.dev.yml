@@ -1,0 +1,22 @@
+# Local development: runs ONLY postgres so you can run api + web natively.
+# Usage: docker compose -f docker-compose.dev.yml up
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sprintflow
+      POSTGRES_PASSWORD: sprintflow
+      POSTGRES_DB: sprintflow
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sprintflow']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_dev_data:

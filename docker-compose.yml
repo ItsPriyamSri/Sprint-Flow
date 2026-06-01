@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sprintflow
+      POSTGRES_PASSWORD: sprintflow
+      POSTGRES_DB: sprintflow
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sprintflow']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    environment:
+      DATABASE_URL: postgresql://sprintflow:sprintflow@postgres:5432/sprintflow?schema=public
+      JWT_ACCESS_SECRET: dev-access-secret-change-in-prod
+      JWT_REFRESH_SECRET: dev-refresh-secret-change-in-prod
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      API_PORT: 3001
+      NODE_ENV: development
+      CORS_ORIGIN: http://localhost:3000
+      STORAGE_DRIVER: local
+      STORAGE_LOCAL_DIR: /app/storage
+      STORAGE_MAX_FILE_SIZE_MB: 20
+      SEED_ADMIN_EMAIL: admin@sprintflow.local
+      SEED_ADMIN_PASSWORD: Admin1234!
+      SEED_ADMIN_NAME: Admin
+      SEED_WORKSPACE_NAME: My Workspace
+    volumes:
+      - api_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+      NODE_ENV: development
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  api_storage:

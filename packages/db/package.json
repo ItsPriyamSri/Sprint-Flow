@@ -1,0 +1,32 @@
+{
+  "name": "@sprintflow/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./generated/client/index.js",
+  "types": "./generated/client/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./generated/client/index.js",
+      "import": "./generated/client/index.js",
+      "types": "./generated/client/index.d.ts"
+    }
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:status": "prisma migrate status",
+    "seed": "tsx src/seed.ts",
+    "studio": "prisma studio",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "prisma": "^6.1.0"
+  },
+  "devDependencies": {
+    "argon2": "^0.41.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

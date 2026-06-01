@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+}
+
+@layer utilities {
+  @keyframes validation-badge-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgb(250 204 21 / 0);
+    }
+    50% {
+      box-shadow: 0 0 0 3px rgb(250 204 21 / 0.35);
+    }
+  }
+
+  @keyframes validation-hint-nudge {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(2px);
+    }
+  }
+
+  @keyframes validation-tooltip-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .validation-badge-pulse {
+    animation: validation-badge-pulse 2.4s ease-in-out infinite;
+  }
+
+  .validation-hint-nudge {
+    animation: validation-hint-nudge 1.6s ease-in-out infinite;
+  }
+
+  .validation-tooltip-in {
+    animation: validation-tooltip-in 180ms ease-out forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .validation-badge-pulse,
+    .validation-hint-nudge,
+    .validation-tooltip-in {
+      animation: none;
+    }
+  }
+}

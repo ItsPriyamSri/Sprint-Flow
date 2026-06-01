@@ -1,0 +1,460 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum GlobalRole {
+  ADMIN
+  MEMBER
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ProjectRole {
+  LEAD
+  MEMBER
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  UNCLAIMED // created from Excel owner name, no password yet
+}
+
+enum SprintStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+}
+
+enum TaskPriority {
+  P0 // was CRITICAL — must-ship, launch-blocking
+  P1 // was HIGH — should-ship
+  P2 // was MEDIUM/LOW — nice-to-have
+}
+
+enum ImportStatus {
+  UPLOADED
+  PARSED
+  PREVIEWED
+  COMMITTED
+  FAILED
+  ROLLED_BACK
+}
+
+enum ImportRowStatus {
+  VALID
+  WARNING
+  ERROR
+  SKIPPED
+  COMMITTED
+}
+
+enum ActivityAction {
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_MOVED
+  TASK_DELETED
+  TASK_COMMENTED
+  TASK_DONE
+  TASK_DEFERRED
+  IMPORT_STARTED
+  IMPORT_COMMITTED
+  IMPORT_ROLLED_BACK
+  SPRINT_CREATED
+  SPRINT_UPDATED
+  COLUMN_ADDED
+  COLUMN_REORDERED
+  PROJECT_CREATED
+}
+
+// ─── Users & Auth ────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  email        String?    @unique // null for UNCLAIMED stubs
+  name         String
+  passwordHash String? // null for UNCLAIMED / INVITED
+  role         GlobalRole @default(MEMBER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  memberships       WorkspaceMember[]
+  projectMemberships ProjectMember[]
+  comments          Comment[]
+  activityLogs      ActivityLog[]
+  notifications     Notification[]
+  preferences       UserPreference?
+  uploads           Import[]
+  attachments       Attachment[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model UserPreference {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  theme       String? // "light" | "dark" | "system"
+  defaultView String? // "overview" | "my-work" | "board"
+  filtersJson Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Workspaces ──────────────────────────────────────────────────────────────
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      WorkspaceMember[]
+  projects     Project[]
+  boards       Board[]
+  sprints      Sprint[]
+  epics        Epic[]
+  labels       Label[]
+  imports      Import[]
+  activityLogs ActivityLog[]
+  tasks        Task[]
+  notifications Notification[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+// ─── Projects ────────────────────────────────────────────────────────────────
+
+model Project {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  name          String
+  description   String?
+  daysPerSprint Int       @default(6) // number of working days in a sprint
+  daysPerWeek   Int       @default(6)
+  releaseDate   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   ProjectMember[]
+  sprints   Sprint[]
+  epics     Epic[]
+  tasks     Task[]
+
+  @@index([workspaceId])
+}
+
+model ProjectMember {
+  id          String      @id @default(cuid())
+  projectId   String
+  userId      String
+  role        ProjectRole @default(MEMBER)
+  hoursPerDay Float       @default(6) // capacity: hrs/day this person works
+  joinedAt    DateTime    @default(now())
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments TaskAssignment[]
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+}
+
+model TaskAssignment {
+  id              String  @id @default(cuid())
+  taskId          String
+  projectMemberId String
+  hours           Decimal @default(0) @db.Decimal(8, 2)
+
+  task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectMember ProjectMember @relation(fields: [projectMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, projectMemberId])
+  @@index([taskId])
+}
+
+// ─── Boards & Columns ────────────────────────────────────────────────────────
+// Board / BoardColumn kept for the secondary Kanban "Flow view".
+
+model Board {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  columns   BoardColumn[]
+  tasks     Task[]
+
+  @@index([workspaceId])
+}
+
+model BoardColumn {
+  id       String  @id @default(cuid())
+  boardId  String
+  name     String
+  key      String // "backlog" | "todo" | "in_progress" | "review" | "done" | custom slug
+  position Float // fractional for O(1) reorder
+  wipLimit Int?
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@index([boardId, position])
+}
+
+// ─── Sprints & Epics ─────────────────────────────────────────────────────────
+
+model Sprint {
+  id               String       @id @default(cuid())
+  workspaceId      String
+  projectId        String? // null = workspace-scoped (legacy)
+  name             String // e.g. "Sprint 1"
+  goal             String? // one-line sprint goal
+  days             Int          @default(6) // working days in this sprint
+  status           SprintStatus @default(PLANNING)
+  startDate        DateTime?
+  endDate          DateTime?
+  releaseMilestone Boolean      @default(false)
+  releaseLabel     String? // e.g. "Release 1 (Internal)"
+  releaseDate      DateTime?
+  position         Float        @default(0)
+  createdAt        DateTime     @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  tasks     Task[]
+
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+model Epic {
+  id          String   @id @default(cuid())
+  workspaceId String
+  projectId   String? // null = workspace-scoped (legacy)
+  name        String
+  color       String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  tasks     Task[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+// ─── Tasks ───────────────────────────────────────────────────────────────────
+
+model Task {
+  id             String        @id @default(cuid())
+  workspaceId    String
+  projectId      String? // null = workspace-scoped (legacy / no project yet)
+  boardId        String // still used for Kanban Flow view
+  columnId       String // still used for Kanban Flow view
+  externalId     String? // Excel "ID" — stored as String to preserve "0.7", "13.5"
+  title          String
+  description    String?
+  notes          String?
+  priority       TaskPriority?
+  sprintId       String?
+  epicId         String?
+  done           Boolean       @default(false) // completion toggle
+  deferred       Boolean       @default(false) // cut from sprint, lives in backlog
+  deferredReason String?
+  position       Float // fractional for O(1) reorder within column
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  board       Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  column      BoardColumn    @relation(fields: [columnId], references: [id])
+  sprint      Sprint?        @relation(fields: [sprintId], references: [id])
+  epic        Epic?          @relation(fields: [epicId], references: [id])
+  assignments TaskAssignment[]
+  comments    Comment[]
+  attachments Attachment[]
+  labels      TaskLabel[]
+  importRows  ImportRow[]
+
+  @@unique([workspaceId, externalId])
+  @@index([workspaceId, boardId])
+  @@index([columnId, position])
+  @@index([sprintId])
+  @@index([epicId])
+  @@index([projectId])
+}
+
+// ─── Comments & Attachments ──────────────────────────────────────────────────
+
+model Comment {
+  id        String   @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([taskId])
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  storageKey   String
+  filename     String
+  mime         String
+  size         Int
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  task       Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([taskId])
+}
+
+// ─── Labels ──────────────────────────────────────────────────────────────────
+
+model Label {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String @default("#94a3b8")
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks     TaskLabel[]
+
+  @@unique([workspaceId, name])
+}
+
+model TaskLabel {
+  taskId  String
+  labelId String
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+}
+
+// ─── Import Pipeline ─────────────────────────────────────────────────────────
+
+model Import {
+  id             String       @id @default(cuid())
+  workspaceId    String
+  uploadedById   String
+  filename       String
+  storageKey     String
+  status         ImportStatus @default(UPLOADED)
+  detectedSheet  String?
+  headerRowIndex Int?
+  columnMap      Json?
+  stats          Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploadedBy User        @relation(fields: [uploadedById], references: [id])
+  rows       ImportRow[]
+
+  @@index([workspaceId])
+}
+
+model ImportRow {
+  id            String          @id @default(cuid())
+  importId      String
+  rowIndex      Int
+  raw           Json
+  normalized    Json
+  status        ImportRowStatus @default(VALID)
+  messages      Json            @default("[]")
+  createdTaskId String?
+
+  import      Import @relation(fields: [importId], references: [id], onDelete: Cascade)
+  createdTask Task?  @relation(fields: [createdTaskId], references: [id])
+
+  @@index([importId])
+  @@index([createdTaskId])
+}
+
+// ─── Activity Log ────────────────────────────────────────────────────────────
+
+model ActivityLog {
+  id          String         @id @default(cuid())
+  workspaceId String
+  actorId     String
+  action      ActivityAction
+  entityType  String
+  entityId    String
+  diff        Json?
+  createdAt   DateTime       @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor     User      @relation(fields: [actorId], references: [id])
+
+  @@index([workspaceId, createdAt])
+  @@index([entityId])
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  type        String
+  payload     Json
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}

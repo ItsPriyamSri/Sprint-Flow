@@ -1,0 +1,27 @@
+{
+  "name": "sprintflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SprintFlow — turn an Excel workbook into a live Scrum board.",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @sprintflow/db generate",
+    "db:migrate": "pnpm --filter @sprintflow/db migrate",
+    "db:seed": "pnpm --filter @sprintflow/db seed",
+    "db:migrate:deploy": "pnpm --filter @sprintflow/db migrate:deploy",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}
