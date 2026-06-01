@@ -18,7 +18,7 @@ export const NormalizedRowSchema = z.object({
   sprintName: z.string().optional(),
   epicName: z.string().optional(),
   ownerName: z.string().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+  priority: z.enum(['P0', 'P1', 'P2']).optional(),
   status: z.string().optional(), // maps to column key
   notes: z.string().optional(),
   hoursN: z.number().optional(),

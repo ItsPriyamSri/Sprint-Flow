@@ -42,10 +42,16 @@ export function Step4Commit({ result, filename, onImportAnother }: Props) {
 
       <div className="flex flex-col gap-3">
         <Link
-          href={`/board${result.boardId ? `?boardId=${result.boardId}` : ''}`}
+          href="/overview"
           className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white hover:bg-indigo-700"
         >
-          Open board →
+          View project overview →
+        </Link>
+        <Link
+          href={`/board${result.boardId ? `?boardId=${result.boardId}` : ''}`}
+          className="rounded-lg border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Open Flow board
         </Link>
         <button
           onClick={onImportAnother}

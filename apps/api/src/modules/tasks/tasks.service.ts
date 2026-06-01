@@ -1,5 +1,6 @@
 import { Prisma } from '@sprintflow/db';
 import { prisma } from '../../lib/prisma';
+import { assertWorkspaceMember } from '../../lib/rbac';
 import { NotFoundError, ForbiddenError } from '../../lib/errors';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -38,7 +39,13 @@ interface UpdateTaskInput {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function assertTaskAccess(taskId: string, workspaceId: string) {
+async function assertTaskAccess(
+  taskId: string,
+  workspaceId: string,
+  userId: string,
+  minRole: 'VIEWER' | 'MEMBER' = 'VIEWER',
+) {
+  await assertWorkspaceMember(userId, workspaceId, minRole);
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) throw new NotFoundError('Task');
   if (task.workspaceId !== workspaceId) throw new ForbiddenError('Task not in this workspace');
@@ -97,6 +104,7 @@ const TASK_INCLUDE = {
 // ─── CRUD ────────────────────────────────────────────────────────────────────
 
 export async function createTask(actorId: string, input: CreateTaskInput) {
+  await assertWorkspaceMember(actorId, input.workspaceId, 'MEMBER');
   const position = await getLastPosition(input.columnId);
 
   const task = await prisma.task.create({
@@ -133,7 +141,8 @@ export async function createTask(actorId: string, input: CreateTaskInput) {
   return task;
 }
 
-export async function getTask(taskId: string, workspaceId: string) {
+export async function getTask(taskId: string, workspaceId: string, userId: string) {
+  await assertWorkspaceMember(userId, workspaceId, 'VIEWER');
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: TASK_INCLUDE,
@@ -151,7 +160,7 @@ export async function updateTask(
   actorId: string,
   input: UpdateTaskInput,
 ) {
-  const old = await assertTaskAccess(taskId, workspaceId);
+  const old = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
 
   const updated = await prisma.task.update({
     where: { id: taskId },
@@ -205,7 +214,7 @@ export async function moveTask(
   actorId: string,
   move: { columnId: string; position: number },
 ) {
-  const old = await assertTaskAccess(taskId, workspaceId);
+  const old = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
 
   const updated = await prisma.task.update({
     where: { id: taskId },
@@ -237,7 +246,7 @@ export async function moveTask(
 }
 
 export async function deleteTask(taskId: string, workspaceId: string, actorId: string) {
-  const task = await assertTaskAccess(taskId, workspaceId);
+  const task = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
   await prisma.task.delete({ where: { id: taskId } });
 
   await prisma.activityLog.create({
@@ -257,10 +266,17 @@ export async function deleteTask(taskId: string, workspaceId: string, actorId: s
 export async function upsertAssignment(
   taskId: string,
   workspaceId: string,
+  actorId: string,
   projectMemberId: string,
   hours: number,
 ) {
-  await assertTaskAccess(taskId, workspaceId);
+  const task = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
+
+  const member = await prisma.projectMember.findUnique({ where: { id: projectMemberId } });
+  if (!member) throw new NotFoundError('Project member');
+  if (task.projectId && member.projectId !== task.projectId) {
+    throw new ForbiddenError('Member does not belong to this task\'s project');
+  }
 
   return prisma.taskAssignment.upsert({
     where: { taskId_projectMemberId: { taskId, projectMemberId } },
@@ -272,9 +288,10 @@ export async function upsertAssignment(
 export async function removeAssignment(
   taskId: string,
   workspaceId: string,
+  actorId: string,
   projectMemberId: string,
 ) {
-  await assertTaskAccess(taskId, workspaceId);
+  await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
 
   await prisma.taskAssignment.deleteMany({
     where: { taskId, projectMemberId },
@@ -289,7 +306,7 @@ export async function createComment(
   authorId: string,
   body: string,
 ) {
-  await assertTaskAccess(taskId, workspaceId);
+  await assertTaskAccess(taskId, workspaceId, authorId, 'MEMBER');
 
   const comment = await prisma.comment.create({
     data: { taskId, authorId, body },

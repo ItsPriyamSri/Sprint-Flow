@@ -6,10 +6,9 @@ import { CSS } from '@dnd-kit/utilities';
 import type { BoardTask } from '@/lib/api/boards';
 
 const PRIORITY_COLORS: Record<string, string> = {
-  LOW:      'bg-slate-200 text-slate-600',
-  MEDIUM:   'bg-blue-100 text-blue-700',
-  HIGH:     'bg-orange-100 text-orange-700',
-  CRITICAL: 'bg-red-100 text-red-700',
+  P0: 'bg-red-100 text-red-700',
+  P1: 'bg-amber-100 text-amber-700',
+  P2: 'bg-slate-200 text-slate-600',
 };
 
 interface Props {
@@ -97,12 +96,13 @@ export function TaskCard({ task, columnId, onEdit }: Props) {
         )}
       </div>
 
-      {task.assigneeName && (
-        <div className="mt-2 flex items-center gap-1">
-          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
-            {task.assigneeName.slice(0, 2).toUpperCase()}
-          </div>
-          <span className="text-[11px] text-slate-400">{task.assigneeName}</span>
+      {task.assignments && task.assignments.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {task.assignments.slice(0, 3).map((a) => (
+            <div key={a.id} className="flex items-center gap-0.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700">
+              {a.memberName.slice(0, 2).toUpperCase()}
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -20,15 +20,14 @@ import {
 } from '@/lib/api/boards';
 
 const PRIORITY_OPTIONS = [
-  { value: '',         label: '— None —' },
-  { value: 'LOW',      label: 'Low' },
-  { value: 'MEDIUM',   label: 'Medium' },
-  { value: 'HIGH',     label: 'High' },
-  { value: 'CRITICAL', label: 'Critical' },
+  { value: '',   label: '— None —' },
+  { value: 'P0', label: 'P0 — Must ship' },
+  { value: 'P1', label: 'P1 — Should ship' },
+  { value: 'P2', label: 'P2 — Nice to have' },
 ];
 
 const PRIORITY_COLOR: Record<string, string> = {
-  LOW: 'text-slate-500', MEDIUM: 'text-blue-600', HIGH: 'text-orange-600', CRITICAL: 'text-red-600',
+  P0: 'text-red-600', P1: 'text-amber-600', P2: 'text-slate-500',
 };
 
 const ACTION_ICONS: Record<string, string> = {
@@ -42,19 +41,14 @@ interface FormState {
   notes: string;
   priority: string;
   externalId: string;
-  hoursN: string;
-  hoursI: string;
-  hoursTotal: string;
   sprintId: string;
   epicId: string;
-  assigneeId: string;
 }
 
 function emptyForm(): FormState {
   return {
     title: '', description: '', notes: '', priority: '', externalId: '',
-    hoursN: '', hoursI: '', hoursTotal: '',
-    sprintId: '', epicId: '', assigneeId: '',
+    sprintId: '', epicId: '',
   };
 }
 
@@ -65,21 +59,11 @@ function taskToForm(task: NonNullable<Awaited<ReturnType<typeof getTask>>>): For
     notes: task.notes ?? '',
     priority: task.priority ?? '',
     externalId: task.externalId ?? '',
-    hoursN: task.hoursN != null ? String(task.hoursN) : '',
-    hoursI: task.hoursI != null ? String(task.hoursI) : '',
-    hoursTotal: task.hoursTotal != null ? String(task.hoursTotal) : '',
     sprintId: task.sprintId ?? '',
     epicId: task.epicId ?? '',
-    assigneeId: task.assigneeId ?? '',
   };
 }
 
-function parseHours(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const n = parseFloat(trimmed);
-  return Number.isFinite(n) ? n : null;
-}
 
 interface Props {
   boardId: string;
@@ -235,15 +219,11 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
         description: form.description.trim() || null,
         notes: form.notes.trim() || null,
         priority: form.priority
-          ? (form.priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL')
+          ? (form.priority as 'P0' | 'P1' | 'P2')
           : null,
         externalId: form.externalId.trim() || null,
-        hoursN: parseHours(form.hoursN),
-        hoursI: parseHours(form.hoursI),
-        hoursTotal: parseHours(form.hoursTotal),
         sprintId: form.sprintId || null,
         epicId: form.epicId || null,
-        assigneeId: form.assigneeId || null,
       },
     });
   };
@@ -382,42 +362,19 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
                 </select>
               </div>
 
-              <div>
-                <label className={labelCls}>Owner</label>
-                <select
-                  value={form.assigneeId}
-                  onChange={(e) => setForm((f) => ({ ...f, assigneeId: e.target.value }))}
-                  className={inputCls}
-                >
-                  <option value="">— Unassigned —</option>
-                  {usersResult?.data.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}{u.status === 'UNCLAIMED' ? ' (unclaimed)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className={labelCls}>Hours</label>
-                <div className="mt-1 grid grid-cols-3 gap-3">
-                  {(['hoursN', 'hoursI', 'hoursTotal'] as const).map((key, i) => (
-                    <div key={key}>
-                      <span className="text-[10px] text-slate-400">
-                        {['Hrs (N)', 'Hrs (I)', 'Total'][i]}
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={form[key]}
-                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                        className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none"
-                      />
-                    </div>
-                  ))}
+              {task && task.assignments && task.assignments.length > 0 && (
+                <div>
+                  <label className={labelCls}>Assignments</label>
+                  <div className="mt-1 space-y-1">
+                    {task.assignments.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs">
+                        <span className="font-medium text-slate-700">{a.memberName}</span>
+                        <span className="font-mono text-slate-500">{a.hours}h</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className={labelCls}>Description</label>

@@ -21,6 +21,18 @@ workspacesRouter.get('/mine', async (req, res, next) => {
                   include: { user: { select: { id: true, name: true, email: true, status: true } } },
                   orderBy: { joinedAt: 'asc' },
                 },
+                sprints: {
+                  orderBy: { position: 'asc' },
+                  select: {
+                    id: true, name: true, goal: true, days: true, status: true,
+                    startDate: true, endDate: true, releaseMilestone: true,
+                    releaseLabel: true, releaseDate: true, position: true, projectId: true,
+                  },
+                },
+                epics: {
+                  orderBy: { name: 'asc' },
+                  select: { id: true, name: true, color: true, projectId: true },
+                },
               },
               orderBy: { createdAt: 'asc' },
               take: 10,
@@ -73,8 +85,17 @@ workspacesRouter.get('/mine', async (req, res, next) => {
           hoursPerDay: m.hoursPerDay,
           status: m.user.status,
         })),
-        sprints: [],
-        epics: [],
+        sprints: p.sprints.map((s) => ({
+          id: s.id, name: s.name, goal: s.goal, days: s.days, status: s.status,
+          startDate: s.startDate?.toISOString() ?? null,
+          endDate: s.endDate?.toISOString() ?? null,
+          releaseMilestone: s.releaseMilestone,
+          releaseLabel: s.releaseLabel,
+          releaseDate: s.releaseDate?.toISOString() ?? null,
+          position: s.position,
+          projectId: s.projectId,
+        })),
+        epics: p.epics,
       })),
     });
   } catch (e) {

@@ -5,10 +5,9 @@ import { columnLabelForTask } from '@/lib/api/boards';
 import { useBoardStore } from '@/store/board.store';
 
 const PRIORITY_COLORS: Record<string, string> = {
-  LOW:      'bg-slate-100 text-slate-600',
-  MEDIUM:   'bg-blue-100 text-blue-700',
-  HIGH:     'bg-orange-100 text-orange-700',
-  CRITICAL: 'bg-red-100 text-red-700',
+  P0: 'bg-red-100 text-red-700',
+  P1: 'bg-amber-100 text-amber-700',
+  P2: 'bg-slate-100 text-slate-600',
 };
 
 const SPRINT_STATUS_COLOR: Record<string, string> = {
@@ -36,8 +35,7 @@ export function SprintView({ board }: Props) {
     groups.get(key)!.push(task);
   }
 
-  // Sort within each group: CRITICAL → HIGH → MEDIUM → LOW → null
-  const PRANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+  const PRANK: Record<string, number> = { P0: 3, P1: 2, P2: 1 };
   const sorted = [...groups.entries()].sort(([a], [b]) =>
     a === '__none__' ? 1 : b === '__none__' ? -1 : a.localeCompare(b),
   );
@@ -93,12 +91,12 @@ export function SprintView({ board }: Props) {
                       </span>
                     )}
                   </div>
-                  {task.assigneeName && (
+                  {task.assignments && task.assignments.length > 0 && (
                     <div className="mt-2 flex items-center gap-1">
                       <div className="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-100 text-[8px] font-bold text-indigo-700">
-                        {task.assigneeName.slice(0, 2).toUpperCase()}
+                        {task.assignments[0]!.memberName.slice(0, 2).toUpperCase()}
                       </div>
-                      <span className="text-[10px] text-slate-400">{task.assigneeName}</span>
+                      <span className="text-[10px] text-slate-400">{task.assignments[0]!.memberName}</span>
                     </div>
                   )}
                 </button>

@@ -1,6 +1,7 @@
 import { Prisma } from '@sprintflow/db';
 import { prisma } from '../../lib/prisma';
 import { storage } from '../../lib/storage';
+import { assertWorkspaceMember } from '../../lib/rbac';
 import { parseWorkbook, reparse, type ParseResult } from './parser';
 import { NotFoundError, ForbiddenError, AppError } from '../../lib/errors';
 
@@ -12,6 +13,7 @@ export async function uploadAndParse(
   filename: string,
   buffer: Buffer,
 ) {
+  await assertWorkspaceMember(uploadedById, workspaceId, 'MEMBER');
   // Parse workbook (throws AppError on bad file)
   const result = parseWorkbook(buffer, filename);
 
@@ -63,8 +65,8 @@ export async function uploadAndParse(
 
 // ─── Preview ─────────────────────────────────────────────────────────────────
 
-export async function getPreview(importId: string, workspaceId: string, statusFilter?: string) {
-  const imp = await getImportOrThrow(importId, workspaceId);
+export async function getPreview(importId: string, workspaceId: string, userId: string, statusFilter?: string) {
+  const imp = await getImportOrThrow(importId, workspaceId, userId);
 
   const where = statusFilter ? { importId, status: statusFilter as 'VALID' | 'WARNING' | 'ERROR' | 'SKIPPED' | 'COMMITTED' } : { importId };
 
@@ -81,9 +83,10 @@ export async function getPreview(importId: string, workspaceId: string, statusFi
 export async function updateMapping(
   importId: string,
   workspaceId: string,
+  userId: string,
   columnMap: Record<string, string>,
 ) {
-  const imp = await getImportOrThrow(importId, workspaceId);
+  const imp = await getImportOrThrow(importId, workspaceId, userId);
   if (imp.status === 'COMMITTED' || imp.status === 'ROLLED_BACK') {
     throw new ForbiddenError('Cannot modify a committed or rolled-back import');
   }
@@ -120,13 +123,87 @@ export async function updateMapping(
 
 // ─── Commit ──────────────────────────────────────────────────────────────────
 
+async function resolveImportProjectId(
+  workspaceId: string,
+  optsProjectId?: string,
+): Promise<string> {
+  if (optsProjectId) {
+    const project = await prisma.project.findFirst({
+      where: { id: optsProjectId, workspaceId },
+    });
+    if (!project) {
+      throw new AppError('BAD_REQUEST', 'Project not found in this workspace', 400);
+    }
+    return project.id;
+  }
+
+  const defaultProject = await prisma.project.findFirst({
+    where: { workspaceId },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (!defaultProject) {
+    throw new AppError('BAD_REQUEST', 'Create a project before importing', 400);
+  }
+  return defaultProject.id;
+}
+
+type ImportTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+async function resolveOrCreateSprintForImport(
+  tx: ImportTx,
+  workspaceId: string,
+  projectId: string,
+  sprintName: string,
+  sprintCache: Map<string, string>,
+): Promise<string> {
+  const cached = sprintCache.get(sprintName);
+  if (cached) return cached;
+
+  const existing = await tx.sprint.findFirst({
+    where: {
+      workspaceId,
+      name: sprintName,
+      OR: [{ projectId: null }, { projectId }],
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (existing) {
+    if (!existing.projectId) {
+      await tx.sprint.update({
+        where: { id: existing.id },
+        data: { projectId },
+      });
+    }
+    sprintCache.set(sprintName, existing.id);
+    return existing.id;
+  }
+
+  const sprintKey = `sprint-${projectId}-${sprintName}`;
+  const sprint = await tx.sprint.upsert({
+    where: { id: sprintKey },
+    update: { projectId },
+    create: {
+      id: sprintKey,
+      workspaceId,
+      projectId,
+      name: sprintName,
+      status: 'PLANNING',
+      days: 6,
+      position: sprintCache.size * 1000,
+    },
+  });
+  sprintCache.set(sprintName, sprint.id);
+  return sprint.id;
+}
+
 export async function commitImport(
   importId: string,
   workspaceId: string,
   actorId: string,
   opts: { createSprints: boolean; createEpics: boolean; projectId?: string },
 ) {
-  const imp = await getImportOrThrow(importId, workspaceId);
+  const imp = await getImportOrThrow(importId, workspaceId, actorId);
   if (imp.status === 'COMMITTED') {
     return { message: 'Already committed', committed: 0, skipped: 0, errors: 0 };
   }
@@ -134,13 +211,13 @@ export async function commitImport(
     throw new ForbiddenError('Import has been rolled back — upload again to re-import');
   }
 
-        const rows = await prisma.importRow.findMany({
+  await assertWorkspaceMember(actorId, workspaceId, 'MEMBER');
+  const projectId = await resolveImportProjectId(workspaceId, opts.projectId);
+
+  const rows = await prisma.importRow.findMany({
     where: { importId, status: { in: ['VALID', 'WARNING'] } },
     orderBy: { rowIndex: 'asc' },
   });
-
-  // Optional projectId from opts
-  const projectId = (opts as { createSprints: boolean; createEpics: boolean; projectId?: string }).projectId ?? null;
 
   // Get the default board + columns for this workspace
   const board = await prisma.board.findFirst({
@@ -160,6 +237,7 @@ export async function commitImport(
 
   let committed = 0;
   let skipped = 0;
+  const createdTaskIds: string[] = [];
 
   // Use a serialised loop (not Promise.all) to keep ordering stable and avoid race conditions
   await prisma.$transaction(
@@ -173,6 +251,7 @@ export async function commitImport(
           ownerName: string | null;
           priority: string | null;
           columnKey: string | null;
+          rawStatus: string | null;
           notes: string | null;
           hoursN: number | null;
           hoursI: number | null;
@@ -181,24 +260,16 @@ export async function commitImport(
 
         if (!norm.title) { skipped++; continue; }
 
-        // Sprint
+        // Sprint — adopt workspace-scoped sprints by name, then attach to project
         let sprintId: string | null = null;
         if (opts.createSprints && norm.sprintName) {
-          if (!sprintCache.has(norm.sprintName)) {
-            const sprint = await tx.sprint.upsert({
-              where: { id: `sprint-${workspaceId}-${norm.sprintName}` },
-              update: {},
-              create: {
-                id: `sprint-${workspaceId}-${norm.sprintName}`,
-                workspaceId,
-                name: norm.sprintName,
-                status: 'PLANNING',
-                position: sprintCache.size * 1000,
-              },
-            });
-            sprintCache.set(norm.sprintName, sprint.id);
-          }
-          sprintId = sprintCache.get(norm.sprintName) ?? null;
+          sprintId = await resolveOrCreateSprintForImport(
+            tx,
+            workspaceId,
+            projectId,
+            norm.sprintName,
+            sprintCache,
+          );
         }
 
         // Epic
@@ -207,8 +278,8 @@ export async function commitImport(
           if (!epicCache.has(norm.epicName)) {
             const epic = await tx.epic.upsert({
               where: { workspaceId_name: { workspaceId, name: norm.epicName } },
-              update: {},
-              create: { workspaceId, name: norm.epicName },
+              update: { projectId },
+              create: { workspaceId, projectId, name: norm.epicName },
             });
             epicCache.set(norm.epicName, epic.id);
           }
@@ -246,6 +317,12 @@ export async function commitImport(
         const pos = (colPositions.get(columnId) ?? 0) + 1000;
         colPositions.set(columnId, pos);
 
+        // Check for deferred status from norm (STATUS_MAP maps "deferred" to "backlog")
+        const isDeferred = norm.rawStatus?.toLowerCase().trim() === 'deferred';
+        const deferredReason = isDeferred
+          ? (norm.notes?.trim() || norm.rawStatus?.trim() || 'Deferred')
+          : undefined;
+
         const taskFields = {
           boardId: board.id,
           columnId,
@@ -254,7 +331,9 @@ export async function commitImport(
           priority: (norm.priority as 'P0' | 'P1' | 'P2' | null) ?? undefined,
           sprintId: sprintId ?? undefined,
           epicId: epicId ?? undefined,
-          projectId: projectId ?? undefined,
+          projectId,
+          deferred: isDeferred,
+          deferredReason,
           position: pos,
         };
 
@@ -271,6 +350,60 @@ export async function commitImport(
               data: { workspaceId, ...taskFields },
             });
 
+        // ── TaskAssignment creation (Phase 6) ─────────────────────────────────
+        // When projectId is provided, resolve ownerName → ProjectMember and create
+        // TaskAssignment rows for hoursN and/or hoursI.
+        if (projectId && (norm.hoursN || norm.hoursI || norm.hoursTotal)) {
+          const isShared = norm.ownerName?.toLowerCase().trim() === 'shared';
+
+          if (isShared) {
+            // "Shared" → split hoursN and hoursI among the first two project members
+            const projectMembers = await tx.projectMember.findMany({
+              where: { projectId },
+              include: { user: { select: { name: true } } },
+              orderBy: { id: 'asc' },
+              take: 2,
+            });
+            const hoursValues = [norm.hoursN ?? 0, norm.hoursI ?? 0];
+            for (let mi = 0; mi < Math.min(projectMembers.length, 2); mi++) {
+              const member = projectMembers[mi];
+              const hrs = hoursValues[mi] ?? 0;
+              if (member && hrs > 0) {
+                await tx.taskAssignment.upsert({
+                  where: { taskId_projectMemberId: { taskId: task.id, projectMemberId: member.id } },
+                  update: { hours: hrs },
+                  create: { taskId: task.id, projectMemberId: member.id, hours: hrs },
+                });
+              }
+            }
+          } else if (norm.ownerName) {
+            // Single owner: find project member by name
+            const ownerKey = norm.ownerName.toLowerCase();
+            if (!ownerCache.has(ownerKey)) {
+              const match = await tx.projectMember.findFirst({
+                where: {
+                  projectId,
+                  user: { name: { equals: norm.ownerName, mode: 'insensitive' } },
+                },
+              });
+              ownerCache.set(ownerKey, match?.id ?? '');
+            }
+            const projectMemberId = ownerCache.get(ownerKey);
+            if (projectMemberId) {
+              const totalHours = norm.hoursTotal ?? (norm.hoursN ?? 0) + (norm.hoursI ?? 0);
+              if (totalHours > 0) {
+                await tx.taskAssignment.upsert({
+                  where: { taskId_projectMemberId: { taskId: task.id, projectMemberId } },
+                  update: { hours: totalHours },
+                  create: { taskId: task.id, projectMemberId, hours: totalHours },
+                });
+              }
+            }
+          }
+        }
+
+        createdTaskIds.push(task.id);
+
         // Link ImportRow → Task
         await tx.importRow.update({
           where: { id: row.id },
@@ -278,6 +411,29 @@ export async function commitImport(
         });
 
         committed++;
+      }
+
+      // Reconcile project linkage for this import batch
+      if (createdTaskIds.length > 0) {
+        await tx.task.updateMany({
+          where: { id: { in: createdTaskIds }, projectId: null },
+          data: { projectId },
+        });
+
+        const sprintLinks = await tx.task.findMany({
+          where: { id: { in: createdTaskIds }, sprintId: { not: null } },
+          select: { sprintId: true },
+          distinct: ['sprintId'],
+        });
+        const sprintIds = sprintLinks
+          .map((t) => t.sprintId)
+          .filter((id): id is string => id !== null);
+        if (sprintIds.length > 0) {
+          await tx.sprint.updateMany({
+            where: { id: { in: sprintIds }, projectId: null },
+            data: { projectId },
+          });
+        }
       }
 
       // Update Import status
@@ -301,13 +457,19 @@ export async function commitImport(
     { timeout: 30000 },
   );
 
-  return { committed, skipped, errors: rows.length - committed - skipped, boardId: board.id };
+  return {
+    committed,
+    skipped,
+    errors: rows.length - committed - skipped,
+    boardId: board.id,
+    projectId,
+  };
 }
 
 // ─── Rollback ────────────────────────────────────────────────────────────────
 
 export async function rollbackImport(importId: string, workspaceId: string, actorId: string) {
-  const imp = await getImportOrThrow(importId, workspaceId);
+  const imp = await getImportOrThrow(importId, workspaceId, actorId);
   if (imp.status !== 'COMMITTED') {
     throw new ForbiddenError('Only committed imports can be rolled back');
   }
@@ -347,7 +509,8 @@ export async function rollbackImport(importId: string, workspaceId: string, acto
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function getImportOrThrow(importId: string, workspaceId: string) {
+async function getImportOrThrow(importId: string, workspaceId: string, userId: string) {
+  await assertWorkspaceMember(userId, workspaceId, 'VIEWER');
   const imp = await prisma.import.findUnique({ where: { id: importId } });
   if (!imp) throw new NotFoundError('Import');
   if (imp.workspaceId !== workspaceId) throw new ForbiddenError('Import not in this workspace');

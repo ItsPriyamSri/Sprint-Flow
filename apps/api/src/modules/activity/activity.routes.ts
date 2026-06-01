@@ -1,16 +1,15 @@
 import { Router, type IRouter } from 'express';
 import { requireAuth } from '../../middleware/auth';
+import { requireWorkspaceAccess } from '../../middleware/workspaceAccess';
 import { prisma } from '../../lib/prisma';
-import { AppError } from '../../lib/errors';
 import type { Request, Response, NextFunction } from 'express';
 
 export const activityRouter: IRouter = Router();
 activityRouter.use(requireAuth);
 
-activityRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
+activityRouter.get('/', requireWorkspaceAccess('VIEWER'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const workspaceId = (req.query['workspaceId'] as string);
-    if (!workspaceId) throw new AppError('BAD_REQUEST', 'workspaceId required', 400);
+    const workspaceId = req.query['workspaceId'] as string;
 
     const entityId = req.query['entityId'] as string | undefined;
     const cursor   = req.query['cursor']   as string | undefined;

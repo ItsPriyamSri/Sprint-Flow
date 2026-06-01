@@ -1,10 +1,10 @@
 import { apiFetch } from './client';
 import type {
   ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto,
-  ProjectMemberDto,
+  ProjectMemberDto, TeamViewDto,
 } from '@sprintflow/shared';
 
-export type { ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto, ProjectMemberDto };
+export type { ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto, ProjectMemberDto, TeamViewDto };
 
 export async function listProjects(workspaceId?: string): Promise<{ data: ProjectDto[] }> {
   const qs = workspaceId ? `?workspaceId=${workspaceId}` : '';
@@ -66,19 +66,10 @@ export async function getMyWork(projectId: string): Promise<MyWorkDto> {
   return apiFetch(`/projects/${projectId}/my-work`);
 }
 
-export async function getTeamView(projectId: string) {
-  return apiFetch<{
-    project: { id: string; name: string };
-    team: Array<{
-      member: ProjectMemberDto;
-      totalCommittedHours: number;
-      totalCapacityHours: number;
-      weeklyCapacity: number;
-      perSprint: Array<{
-        sprintId: string; sprintName: string;
-        committedHours: number; budgetHours: number; overloaded: boolean;
-      }>;
-      overloaded: boolean;
-    }>;
-  }>(`/projects/${projectId}/team`);
+export async function getTeamView(projectId: string): Promise<TeamViewDto> {
+  return apiFetch(`/projects/${projectId}/team`);
+}
+
+export async function getBacklog(projectId: string): Promise<{ data: import('@sprintflow/shared').SprintTaskDto[] }> {
+  return apiFetch(`/projects/${projectId}/backlog`);
 }

@@ -4,7 +4,7 @@ export const BoardFiltersSchema = z.object({
   sprint: z.string().optional(),
   owner: z.string().optional(),
   epic: z.string().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+  priority: z.enum(['P0', 'P1', 'P2']).optional(),
   status: z.string().optional(),
 });
 export type BoardFilters = z.infer<typeof BoardFiltersSchema>;

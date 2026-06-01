@@ -111,6 +111,8 @@ function RowValidationStatus({ row }: { row: ImportRow }) {
 
 interface Props {
   preview: PreviewResponse;
+  targetProjectName?: string | null;
+  canCommit?: boolean;
   onCommit: () => void;
   onBack: () => void;
   loading: boolean;
@@ -119,7 +121,15 @@ interface Props {
 
 type FilterKey = 'ALL' | 'VALID' | 'WARNING' | 'ERROR' | 'SKIPPED';
 
-export function Step3Preview({ preview, onCommit, onBack, loading, error }: Props) {
+export function Step3Preview({
+  preview,
+  targetProjectName,
+  canCommit: canCommitProject = true,
+  onCommit,
+  onBack,
+  loading,
+  error,
+}: Props) {
   const [filter, setFilter] = useState<FilterKey>('ALL');
   const stats = preview.import.stats;
 
@@ -127,7 +137,8 @@ export function Step3Preview({ preview, onCommit, onBack, loading, error }: Prop
     (r) => filter === 'ALL' || r.status === filter,
   );
 
-  const canCommit = (stats?.valid ?? 0) + (stats?.warnings ?? 0) > 0;
+  const hasRows = (stats?.valid ?? 0) + (stats?.warnings ?? 0) > 0;
+  const canCommit = hasRows && canCommitProject;
 
   return (
     <div className="space-y-6">
@@ -136,6 +147,15 @@ export function Step3Preview({ preview, onCommit, onBack, loading, error }: Prop
         <p className="mt-1 text-sm text-slate-500">
           Review the rows below before committing. Errors will be skipped; warnings are imported with a flag.
         </p>
+        {targetProjectName ? (
+          <p className="mt-2 text-sm text-slate-600">
+            Importing into: <span className="font-semibold text-indigo-700">{targetProjectName}</span>
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-amber-700">
+            No project available — create a project before importing.
+          </p>
+        )}
       </div>
 
       {/* Stats bar */}

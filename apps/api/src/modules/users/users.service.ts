@@ -73,9 +73,20 @@ export async function listUsers(workspaceId: string, query?: string) {
   });
 }
 
-export async function getUser(userId: string) {
+export async function getUser(requesterId: string, targetUserId: string, workspaceId: string) {
+  const [requesterMembership, targetMembership] = await Promise.all([
+    prisma.workspaceMember.findUnique({
+      where: { userId_workspaceId: { userId: requesterId, workspaceId } },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { userId_workspaceId: { userId: targetUserId, workspaceId } },
+    }),
+  ]);
+  if (!requesterMembership) throw new ForbiddenError('Not a workspace member');
+  if (!targetMembership) throw new NotFoundError('User');
+
   const user = await prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: targetUserId },
     select: { id: true, name: true, email: true, role: true, status: true, createdAt: true },
   });
   if (!user) throw new NotFoundError('User');

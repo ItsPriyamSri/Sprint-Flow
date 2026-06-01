@@ -48,6 +48,7 @@ export interface CommitResponse {
   skipped: number;
   errors: number;
   boardId: string;
+  projectId?: string;
 }
 
 export async function uploadWorkbook(
@@ -86,7 +87,7 @@ export async function updateMapping(
 export async function commitImport(
   importId: string,
   workspaceId: string,
-  opts: { createSprints: boolean; createEpics: boolean },
+  opts: { createSprints: boolean; createEpics: boolean; projectId?: string },
 ): Promise<CommitResponse> {
   return apiFetch(`/imports/${importId}/commit?workspaceId=${workspaceId}`, {
     method: 'POST',

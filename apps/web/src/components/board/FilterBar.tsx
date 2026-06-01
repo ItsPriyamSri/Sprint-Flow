@@ -5,7 +5,7 @@ import { useBoardStore } from '@/store/board.store';
 import { getMyWorkspace } from '@/lib/api/workspaces';
 import { listWorkspaceUsers } from '@/lib/api/users';
 
-const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const PRIORITIES = ['P0', 'P1', 'P2'] as const;
 
 interface Props {
   workspaceId: string;

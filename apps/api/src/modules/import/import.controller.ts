@@ -57,7 +57,7 @@ export async function preview(req: Request, res: Response, next: NextFunction) {
     const workspaceId = getWorkspaceId(req);
     const statusFilter = typeof req.query['status'] === 'string' ? req.query['status'] : undefined;
 
-    const result = await importService.getPreview(importId, workspaceId, statusFilter);
+    const result = await importService.getPreview(importId, workspaceId, req.user!.id, statusFilter);
 
     res.json({
       import: {
@@ -93,7 +93,7 @@ export async function updateMapping(req: Request, res: Response, next: NextFunct
       .object({ columnMap: z.record(z.string(), z.string()) })
       .parse(req.body);
 
-    const result = await importService.updateMapping(importId, workspaceId, columnMap);
+    const result = await importService.updateMapping(importId, workspaceId, req.user!.id, columnMap);
     res.json(result);
   } catch (e) {
     next(e);
@@ -104,16 +104,18 @@ export async function commit(req: Request, res: Response, next: NextFunction) {
   try {
     const { importId } = req.params as { importId: string };
     const workspaceId = getWorkspaceId(req);
-    const { createSprints = true, createEpics = true } = z
+    const { createSprints = true, createEpics = true, projectId } = z
       .object({
         createSprints: z.boolean().default(true),
         createEpics: z.boolean().default(true),
+        projectId: z.string().optional(),
       })
       .parse(req.body ?? {});
 
     const result = await importService.commitImport(importId, workspaceId, req.user!.id, {
       createSprints,
       createEpics,
+      projectId,
     });
     res.json(result);
   } catch (e) {

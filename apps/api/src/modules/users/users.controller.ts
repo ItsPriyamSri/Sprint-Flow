@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { AppError } from '../../lib/errors';
 import * as usersService from './users.service';
 
 export async function invite(req: Request, res: Response, next: NextFunction) {
@@ -45,7 +46,11 @@ export async function listUsers(req: Request, res: Response, next: NextFunction)
 export async function getUser(req: Request, res: Response, next: NextFunction) {
   try {
     const { userId } = req.params as { userId: string };
-    const user = await usersService.getUser(userId);
+    const workspaceId = req.query['workspaceId'] as string;
+    if (!workspaceId) {
+      throw new AppError('BAD_REQUEST', 'workspaceId query parameter required', 400);
+    }
+    const user = await usersService.getUser(req.user!.id, userId, workspaceId);
     res.json(user);
   } catch (e) {
     next(e);

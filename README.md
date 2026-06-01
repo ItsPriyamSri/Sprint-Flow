@@ -1,8 +1,8 @@
 # SprintFlow
 
-> Upload your Excel workbook. Get a live Scrum board — instantly.
+> Upload your Excel workbook. Get a live Scrum planning dashboard — instantly.
 
-SprintFlow converts an existing Excel-based task workflow into a modern, interactive Scrum board with zero manual data entry. Upload the workbook you already use; within a minute all your tasks appear as draggable cards.
+SprintFlow converts an existing Excel-based task workflow (e.g. CARR Master Task List) into a project-scoped Scrum platform: **Overview**, **Sprint boards**, **My Work**, **Team capacity**, **Backlog**, and a **Flow** Kanban view. Upload the workbook you already use; within a minute tasks appear on the dashboard and board with sprints, epics, and hour assignments tied to your active project.
 
 ---
 
@@ -55,23 +55,32 @@ Open two terminals:
 # Terminal 1 — API on http://localhost:3001
 pnpm --filter @sprintflow/api dev
 
-# Terminal 2 — Web on http://localhost:3000
+# Terminal 2 — Web on http://localhost:3002
 pnpm --filter @sprintflow/web dev
+
+# Or both from repo root:
+pnpm dev
 ```
 
 Health check: `GET http://localhost:3001/api/v1/health` → `{"status":"ok","db":"ok"}`
+
+Ensure `CORS_ORIGIN` in `.env` matches the web port (default `http://localhost:3002`).
 
 ---
 
 ## Using the Application
 
-1. Open `http://localhost:3000` → redirected to `/login`
+1. Open `http://localhost:3002` → redirected to `/login`
 2. Sign in as `admin@sprintflow.local` / `Admin1234!`
-3. Click **Import workbook** → upload your `.xlsx` file
-4. Review detected sheet + column mapping → click **Preview data**
-5. Verify the ~46 rows (decimal IDs like `0.7`, `13.5` are preserved exactly)
-6. Click **Import X tasks** → redirected to the board
-7. Drag cards between columns, filter by sprint/owner/epic, switch to Sprint/Backlog/Owner views
+3. Land on **Overview** for the active project (sidebar: sprints, My Work, Team, Backlog, Flow, Import)
+4. **Import workbook** (sidebar or `/import`) → upload your `.xlsx` file
+5. Map columns → preview (confirm **Importing into: &lt;project&gt;**)
+6. Commit → **View project overview** — sprint health, capacity, and task counts update
+7. Open sprints from the sidebar for the epic-grouped sprint board; use **Flow** (`/board`) for Kanban drag-and-drop
+
+**Re-import:** Committing the same workbook again upserts tasks by `externalId` and re-links sprints/epics to the active project. Use this after upgrades if older imports only appeared on Flow.
+
+**Note:** Imports bind to the **active project** (or the workspace’s first project). Tasks without project/sprint linkage appear on Flow but not on Overview — re-import to repair.
 
 ---
 
@@ -109,7 +118,7 @@ docker compose up --build -d
 This starts three containers:
 - `postgres` — PostgreSQL 16
 - `api` — Express REST API (port 3001); runs `prisma migrate deploy` then starts
-- `web` — Next.js 15 standalone server (port 3000)
+- `web` — Next.js 15 standalone server (port 3000 in Docker; dev uses 3002)
 
 ### 3 — Smoke test
 
@@ -122,7 +131,7 @@ curl http://localhost:3001/api/v1/health
 # Expected: {"status":"ok","db":"ok","timestamp":"..."}
 
 # Web responding?
-curl -I http://localhost:3000
+curl -I http://localhost:3000   # production Docker
 # Expected: HTTP/1.1 200 OK
 ```
 
@@ -184,7 +193,7 @@ Default: 20 MB. To increase, set `STORAGE_MAX_FILE_SIZE_MB=50` in `.env` and upd
 ```
 apps/
   api/          Express REST API — all endpoints under /api/v1/
-  web/          Next.js 15 App Router frontend
+  web/          Next.js 15 App Router — (app) shell: overview, sprints, import, flow board
 packages/
   db/           Prisma schema + migrations + generated client + seed
   shared/       Zod schemas + TypeScript types (web ↔ api contract)
@@ -239,8 +248,10 @@ pnpm exec prisma migrate dev --name describe_the_change
 3. **Normalize** — maps each cell to its field; reads cell `.w` (Excel formatted text) to preserve decimal IDs like `0.7`, `13.5`, `22.3` exactly as strings
 4. **Validate** — per-row status: VALID / WARNING / ERROR / SKIPPED; unknown statuses/priorities get safe defaults
 5. **Preview** — user reviews all rows before committing; can remap columns
-6. **Commit** — single database transaction: upserts Sprints + Epics + owner stubs, creates Tasks, links audit trail
+6. **Commit** — transactional: resolves **projectId** (required), adopts workspace sprints by name, sets `projectId` on sprints/epics/tasks, creates `TaskAssignment` rows from hour columns when project members match
 7. **Rollback** — reverses a committed import (removes tasks created by that import)
+
+Imported data is visible on **Overview** and project views when tasks use sprints belonging to that project (not only on the Flow board).
 
 ---
 

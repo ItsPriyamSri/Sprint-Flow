@@ -59,7 +59,7 @@ tasksRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const created = await svc.createTask(req.user!.id, req.body);
-      const task = await svc.getTask(created.id, (req.body as { workspaceId: string }).workspaceId);
+      const task = await svc.getTask(created.id, (req.body as { workspaceId: string }).workspaceId, req.user!.id);
       res.status(201).json(serializeTask(task));
     } catch (e) { next(e); }
   },
@@ -68,7 +68,7 @@ tasksRouter.post(
 // ── Get detail ────────────────────────────────────────────────────────────────
 tasksRouter.get('/:taskId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const task = await svc.getTask(paramStr(req, 'taskId'), wsId(req));
+    const task = await svc.getTask(paramStr(req, 'taskId'), wsId(req), req.user!.id);
     res.json(serializeTask(task));
   } catch (e) { next(e); }
 });
@@ -97,7 +97,7 @@ tasksRouter.patch(
       const taskId = paramStr(req, 'taskId');
       const workspaceId = wsId(req);
       await svc.updateTask(taskId, workspaceId, req.user!.id, req.body);
-      const task = await svc.getTask(taskId, workspaceId);
+      const task = await svc.getTask(taskId, workspaceId, req.user!.id);
       res.json(serializeTask(task));
     } catch (e) { next(e); }
   },
@@ -137,6 +137,7 @@ tasksRouter.put(
       const assignment = await svc.upsertAssignment(
         paramStr(req, 'taskId'),
         wsId(req),
+        req.user!.id,
         paramStr(req, 'projectMemberId'),
         (req.body as { hours: number }).hours,
       );
@@ -153,6 +154,7 @@ tasksRouter.delete(
       await svc.removeAssignment(
         paramStr(req, 'taskId'),
         wsId(req),
+        req.user!.id,
         paramStr(req, 'projectMemberId'),
       );
       res.status(204).send();

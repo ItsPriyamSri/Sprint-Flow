@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
-import { NotFoundError, ForbiddenError } from '../../lib/errors';
+import { assertWorkspaceMember } from '../../lib/rbac';
+import { NotFoundError, ForbiddenError, AppError } from '../../lib/errors';
 import type { Request, Response, NextFunction } from 'express';
 
 export const projectsRouter: IRouter = Router();
@@ -43,15 +44,26 @@ function sprintDto(s: {
   };
 }
 
-async function assertProjectAccess(projectId: string, userId: string) {
+async function assertProjectAccess(
+  projectId: string,
+  userId: string,
+  minRole: 'VIEWER' | 'MEMBER' = 'VIEWER',
+) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: { workspace: { include: { members: { select: { userId: true } } } } },
   });
   if (!project) throw new NotFoundError('Project');
-  const isMember = project.workspace.members.some((m) => m.userId === userId);
-  if (!isMember) throw new ForbiddenError('Not a workspace member');
+  await assertWorkspaceMember(userId, project.workspaceId, minRole);
   return project;
+}
+
+async function assertProjectMemberBelongs(projectId: string, memberId: string) {
+  const member = await prisma.projectMember.findFirst({
+    where: { id: memberId, projectId },
+  });
+  if (!member) throw new NotFoundError('Project member');
+  return member;
 }
 
 // ── List projects for workspace ───────────────────────────────────────────────
@@ -122,7 +134,7 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
     const allSprintIds = project.sprints.map((s) => s.id);
 
     const allTasks = await prisma.task.findMany({
-      where: { projectId, sprintId: { in: allSprintIds } },
+      where: { sprintId: { in: allSprintIds } },
       select: {
         id: true, sprintId: true, priority: true, done: true, updatedAt: true,
         assignments: { select: { projectMemberId: true, hours: true } },
@@ -257,6 +269,18 @@ projectsRouter.post(
         where: { userId_workspaceId: { userId: req.user!.id, workspaceId: body.workspaceId } },
       });
       if (!wsMembership) throw new ForbiddenError('Not a workspace member');
+      if (wsMembership.role === 'VIEWER') {
+        throw new ForbiddenError('Viewers cannot create projects');
+      }
+
+      const memberUserIds = body.members.map((m) => m.userId);
+      const validMembers = await prisma.workspaceMember.findMany({
+        where: { workspaceId: body.workspaceId, userId: { in: memberUserIds } },
+        select: { userId: true },
+      });
+      if (validMembers.length !== memberUserIds.length) {
+        throw new AppError('BAD_REQUEST', 'All project members must belong to the workspace', 400);
+      }
 
       const project = await prisma.$transaction(async (tx) => {
         const p = await tx.project.create({
@@ -365,7 +389,7 @@ projectsRouter.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.params as { projectId: string };
-      await assertProjectAccess(projectId, req.user!.id);
+      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
       const body = req.body as {
         name?: string; description?: string | null;
         daysPerSprint?: number; daysPerWeek?: number; releaseDate?: string | null;
@@ -395,7 +419,8 @@ projectsRouter.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId, memberId } = req.params as { projectId: string; memberId: string };
-      await assertProjectAccess(projectId, req.user!.id);
+      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      await assertProjectMemberBelongs(projectId, memberId);
       const body = req.body as { role?: string; hoursPerDay?: number };
       const updated = await prisma.projectMember.update({
         where: { id: memberId },
@@ -533,6 +558,69 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       upcomingTasks,
       daysRemaining,
     });
+  } catch (e) { next(e); }
+});
+
+// ── Backlog view ─────────────────────────────────────────────────────────────
+// GET /projects/:projectId/backlog — tasks that are deferred=true or sprintId=null
+projectsRouter.get('/:projectId/backlog', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectAccess(projectId, req.user!.id);
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        projectId,
+        OR: [
+          { sprintId: null },
+          { deferred: true },
+        ],
+      },
+      include: {
+        epic:   { select: { id: true, name: true, color: true, projectId: true } },
+        sprint: { select: { id: true, name: true, status: true } },
+        assignments: {
+          include: {
+            projectMember: { select: { id: true, user: { select: { id: true, name: true } } } },
+          },
+        },
+      },
+      orderBy: [{ priority: 'asc' }, { position: 'asc' }],
+    });
+
+    const data = tasks.map((t) => {
+      const totalHours = t.assignments.reduce((sum, a) => sum + Number(a.hours), 0);
+      return {
+        id: t.id,
+        externalId: t.externalId,
+        title: t.title,
+        description: t.description,
+        notes: t.notes,
+        priority: t.priority,
+        columnId: t.columnId,
+        projectId: t.projectId,
+        sprintId: t.sprintId,
+        sprintName: t.sprint?.name ?? null,
+        epicId: t.epicId,
+        epicName: t.epic?.name ?? null,
+        epicColor: t.epic?.color ?? null,
+        done: t.done,
+        deferred: t.deferred,
+        deferredReason: t.deferredReason,
+        assignments: t.assignments.map((a) => ({
+          id: a.id,
+          projectMemberId: a.projectMemberId,
+          memberName: a.projectMember.user.name,
+          hours: Number(a.hours),
+        })),
+        totalHours,
+        position: t.position,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+      };
+    });
+
+    res.json({ data });
   } catch (e) { next(e); }
 });
 

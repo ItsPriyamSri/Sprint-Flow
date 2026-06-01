@@ -8,13 +8,12 @@ import { useBoardStore } from '@/store/board.store';
 type SortKey = 'priority' | 'title' | 'sprint' | 'owner' | 'epic';
 type SortDir = 'asc' | 'desc';
 
-const PRANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+const PRANK: Record<string, number> = { P0: 3, P1: 2, P2: 1 };
 
 const PRIORITY_BADGE: Record<string, string> = {
-  LOW:      'bg-slate-100 text-slate-600',
-  MEDIUM:   'bg-blue-100 text-blue-700',
-  HIGH:     'bg-orange-100 text-orange-700',
-  CRITICAL: 'bg-red-100 text-red-700',
+  P0: 'bg-red-100 text-red-700',
+  P1: 'bg-amber-100 text-amber-700',
+  P2: 'bg-slate-100 text-slate-600',
 };
 
 interface RowTask extends BoardTask {}
@@ -34,7 +33,7 @@ export function BacklogView({ board }: Props) {
       case 'priority': return dir * ((PRANK[a.priority ?? ''] ?? 0) - (PRANK[b.priority ?? ''] ?? 0));
       case 'title':    return dir * a.title.localeCompare(b.title);
       case 'sprint':   return dir * (a.sprintName ?? '').localeCompare(b.sprintName ?? '');
-      case 'owner':    return dir * (a.assigneeName ?? '').localeCompare(b.assigneeName ?? '');
+      case 'owner':    return dir * (a.assignments?.[0]?.memberName ?? '').localeCompare(b.assignments?.[0]?.memberName ?? '');
       case 'epic':     return dir * (a.epicName ?? '').localeCompare(b.epicName ?? '');
       default: return 0;
     }
@@ -113,7 +112,7 @@ export function BacklogView({ board }: Props) {
                   {task.sprintName ?? <span className="text-slate-300">—</span>}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-500">
-                  {task.assigneeName ?? <span className="text-slate-300">—</span>}
+                  {task.assignments?.[0]?.memberName ?? <span className="text-slate-300">—</span>}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-500">
                   {task.epicName ?? <span className="text-slate-300">—</span>}

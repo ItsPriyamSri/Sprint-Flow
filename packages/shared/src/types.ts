@@ -199,6 +199,30 @@ export interface MyWorkDto {
   daysRemaining: number;
 }
 
+// ─── Team View DTOs ───────────────────────────────────────────────────────────
+
+export interface TeamMemberSprintDto {
+  sprintId: string;
+  sprintName: string;
+  committedHours: number;
+  budgetHours: number;
+  overloaded: boolean;
+}
+
+export interface TeamMemberDto {
+  member: ProjectMemberDto;
+  totalCommittedHours: number;
+  totalCapacityHours: number;
+  weeklyCapacity: number;
+  perSprint: TeamMemberSprintDto[];
+  overloaded: boolean;
+}
+
+export interface TeamViewDto {
+  project: { id: string; name: string };
+  team: TeamMemberDto[];
+}
+
 // ─── Import DTOs ──────────────────────────────────────────────────────────────
 
 export interface ImportDto {

@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
+import { useProjectStore } from '@/store/project.store';
+import { getMyWorkspace } from '@/lib/api/workspaces';
 import { uploadWorkbook, updateMapping, getPreview, commitImport } from '@/lib/api/import';
 import type { UploadResponse, PreviewResponse, CommitResponse } from '@/lib/api/import';
 import { Step1Upload } from './Step1Upload';
@@ -20,7 +22,10 @@ const STEPS = [
 ];
 
 export function ImportWizard() {
+  const queryClient = useQueryClient();
   const workspaceId = useAuthStore((s) => s.defaultWorkspaceId) ?? '';
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const setActiveProject = useProjectStore((s) => s.setActiveProject);
   const [step, setStep] = useState<Step>(1);
   const [file, setFile] = useState<File | null>(null);
   const [upload, setUpload] = useState<UploadResponse | null>(null);
@@ -28,7 +33,22 @@ export function ImportWizard() {
   const [commit, setCommit] = useState<CommitResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace'],
+    queryFn: getMyWorkspace,
+    enabled: !!workspaceId,
+    staleTime: 60_000,
+  });
+
+  const targetProject =
+    workspace?.projects?.find((p) => p.id === activeProjectId) ??
+    workspace?.projects?.[0] ??
+    null;
+
   const clearError = () => setError(null);
+
+  const resolveProjectId = (): string | null =>
+    activeProjectId ?? workspace?.projects?.[0]?.id ?? null;
 
   // Step 1 → upload + parse
   const uploadMutation = useMutation({
@@ -47,18 +67,38 @@ export function ImportWizard() {
     onError: (e: Error) => setError(e.message),
   });
 
-  // Step 1 confirmed mapping without changes → just preview
-  const previewMutation = useMutation({
-    mutationFn: () => getPreview(upload!.importId, workspaceId),
-    onSuccess: (data) => { setPreview(data); setStep(3); clearError(); },
-    onError: (e: Error) => setError(e.message),
-  });
-
   // Step 3 → commit
   const commitMutation = useMutation({
-    mutationFn: () =>
-      commitImport(upload!.importId, workspaceId, { createSprints: true, createEpics: true }),
-    onSuccess: (data) => { setCommit(data); setStep(4); clearError(); },
+    mutationFn: () => {
+      const projectId = resolveProjectId();
+      if (!projectId) {
+        throw new Error('Create or select a project before importing.');
+      }
+      return commitImport(upload!.importId, workspaceId, {
+        createSprints: true,
+        createEpics: true,
+        projectId,
+      });
+    },
+    onSuccess: async (data) => {
+      const projectId = data.projectId ?? resolveProjectId();
+      await queryClient.invalidateQueries({ queryKey: ['workspace'] });
+      if (projectId) {
+        await queryClient.invalidateQueries({ queryKey: ['project-overview', projectId] });
+        await queryClient.invalidateQueries({ queryKey: ['backlog', projectId] });
+      }
+      const refreshed = await queryClient.fetchQuery({
+        queryKey: ['workspace'],
+        queryFn: getMyWorkspace,
+      });
+      const proj =
+        refreshed.projects?.find((p) => p.id === (projectId ?? activeProjectId)) ??
+        refreshed.projects?.[0];
+      if (proj) setActiveProject(proj);
+      setCommit(data);
+      setStep(4);
+      clearError();
+    },
     onError: (e: Error) => setError(e.message),
   });
 
@@ -110,7 +150,7 @@ export function ImportWizard() {
             upload={upload}
             onConfirm={(map) => mappingMutation.mutate(map)}
             onBack={() => { setStep(1); clearError(); }}
-            loading={mappingMutation.isPending || previewMutation.isPending}
+            loading={mappingMutation.isPending}
             error={error}
           />
         )}
@@ -118,6 +158,8 @@ export function ImportWizard() {
         {step === 3 && preview && (
           <Step3Preview
             preview={preview}
+            targetProjectName={targetProject?.name ?? null}
+            canCommit={!!resolveProjectId()}
             onCommit={() => commitMutation.mutate()}
             onBack={() => { setStep(2); clearError(); }}
             loading={commitMutation.isPending}

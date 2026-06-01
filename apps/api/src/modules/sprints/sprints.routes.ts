@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
-import { AppError, NotFoundError } from '../../lib/errors';
+import { assertWorkspaceMember } from '../../lib/rbac';
+import { AppError, NotFoundError, ForbiddenError } from '../../lib/errors';
 import type { Request, Response, NextFunction } from 'express';
 
 export const sprintsRouter: IRouter = Router();
@@ -13,6 +14,12 @@ function wsId(req: Request): string {
   const id = (req.query['workspaceId'] as string) ?? req.body?.workspaceId;
   if (!id) throw new AppError('BAD_REQUEST', 'workspaceId required', 400);
   return id;
+}
+
+async function assertWsAccess(req: Request, minRole: 'VIEWER' | 'MEMBER' = 'VIEWER') {
+  const workspaceId = wsId(req);
+  await assertWorkspaceMember(req.user!.id, workspaceId, minRole);
+  return workspaceId;
 }
 
 function sprintToDto(s: {
@@ -40,7 +47,7 @@ function sprintToDto(s: {
 // ── List ──────────────────────────────────────────────────────────────────────
 sprintsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const workspaceId = wsId(req);
+    const workspaceId = await assertWsAccess(req, 'VIEWER');
     const projectId = req.query['projectId'] as string | undefined;
 
     const sprints = await prisma.sprint.findMany({
@@ -59,7 +66,7 @@ sprintsRouter.get('/:sprintId/board', async (req: Request, res: Response, next: 
   try {
     const rawSprintId = req.params['sprintId'];
     const sprintId = Array.isArray(rawSprintId) ? rawSprintId[0]! : rawSprintId!;
-    const workspaceId = wsId(req);
+    const workspaceId = await assertWsAccess(req, 'VIEWER');
 
     // Fetch sprint with project + members in one query
     const sprintRaw = await prisma.sprint.findUnique({
@@ -78,7 +85,7 @@ sprintsRouter.get('/:sprintId/board', async (req: Request, res: Response, next: 
       },
     });
     if (!sprintRaw) throw new NotFoundError('Sprint');
-    if (sprintRaw.workspaceId !== workspaceId) throw new AppError('FORBIDDEN', 'Sprint not in this workspace', 403);
+    if (sprintRaw.workspaceId !== workspaceId) throw new ForbiddenError('Sprint not in this workspace');
 
     const tasks = await prisma.task.findMany({
       where: { sprintId, workspaceId },
@@ -201,6 +208,7 @@ sprintsRouter.post(
         status: string; startDate?: string; endDate?: string;
         releaseMilestone?: boolean; releaseLabel?: string; releaseDate?: string;
       };
+      await assertWorkspaceMember(req.user!.id, body.workspaceId, 'MEMBER');
       const last = await prisma.sprint.findFirst({
         where: { workspaceId: body.workspaceId },
         orderBy: { position: 'desc' },
@@ -255,10 +263,11 @@ sprintsRouter.patch(
       const sprintId = Array.isArray(req.params['sprintId'])
         ? req.params['sprintId'][0]!
         : req.params['sprintId']!;
+      const workspaceId = await assertWsAccess(req, 'MEMBER');
       const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
       if (!sprint) throw new NotFoundError('Sprint');
-      if (sprint.workspaceId !== wsId(req)) {
-        throw new AppError('FORBIDDEN', 'Sprint not in this workspace', 403);
+      if (sprint.workspaceId !== workspaceId) {
+        throw new ForbiddenError('Sprint not in this workspace');
       }
 
       const body = req.body as {

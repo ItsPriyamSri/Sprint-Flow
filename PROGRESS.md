@@ -1,9 +1,43 @@
 # SprintFlow — Build Progress & Handoff
 
-**Last updated:** 2026-05-30  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 — **MVP COMPLETE**  
-**Status:** All planned features shipped. See AI_ROADMAP.md for the AI integration plan.  
-**Repo location:** `D:\Development Area\Priyam\SprintFlow`
+**Last updated:** 2026-06-01  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · **6 (Scrum platform)**  
+**Status:** Scrum planning pivot shipped; import → main dashboard linkage hardened. See AI_ROADMAP.md for AI work.  
+**Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+---
+
+## Phase 6 — Scrum platform + import dashboard fix (2026-06-01)
+
+### What was built
+
+| Area | Detail |
+|---|---|
+| **Schema** | `Project`, `ProjectMember`, `TaskAssignment`; sprint `goal`/`days`/release fields; `Task.deferred` / `deferredReason`; priority `P0\|P1\|P2` |
+| **API** | `GET/POST /projects`, overview, my-work, team, backlog; `GET /sprints/:id/board`; workspace `mine` hydrates projects with sprints/epics |
+| **Web shell** | `(app)` layout + sidebar; routes: `/overview`, `/sprints/[id]`, `/my-work`, `/team`, `/backlog`, `/onboarding`, `/import`, `/board` (Flow) |
+| **Scrum UI** | `ProjectOverview`, `SprintBoardView`, `ScrumTaskDrawer`, `InlineAddTask` |
+| **Import → dashboard** | `commitImport` requires/resolves `projectId`, adopts workspace sprints by name, post-commit reconciliation; Overview queries by `sprintId ∈ project.sprints`; wizard invalidates cache + links to `/overview` |
+| **Security / quality** | `assertWorkspaceMember` on tasks/sprints/imports/activity; assignment validates project member; project role gating; password change revokes refresh tokens; removed duplicate `app/board` and `app/import` routes |
+
+### Import visibility (why Flow worked but Overview did not)
+
+- **Flow** loads tasks by `boardId` (no `projectId` filter).
+- **Overview / Backlog / Team** filter by `projectId` and project-scoped sprints.
+- Fix: bind every import to a project, attach sprints to that project (reuse legacy workspace sprints by name), always set `task.projectId`, invalidate React Query after commit.
+
+### Verification (2026-06-01)
+
+- `pnpm exec tsc --noEmit -p apps/api` — pass  
+- `pnpm exec tsc --noEmit -p apps/web` — pass  
+- No automated import/overview tests yet — manual: import → **View project overview** → confirm sprint cards and sidebar sprints
+
+### Known follow-ups (not blocking)
+
+- Multi-sheet Excel importer  
+- My Work requires `TaskAssignment` rows (owner must match `ProjectMember`)  
+- Onboarding “add member” needs invite-by-email or workspace member picker only  
+- Flow toggle embedded in sprint board (Flow is a separate route today)
 
 ---
 
@@ -150,7 +184,7 @@ The most important feature. Located in `apps/api/src/modules/import/parser/`.
 1. **Upload** (`POST /imports`) — magic-byte validate, store via StorageDriver, detect sheet + header row dynamically (no hardcoded row numbers), normalize all rows, create `Import` + `ImportRow` records.
 2. **Preview** (`GET /imports/:id/preview`) — returns rows colour-coded VALID/WARNING/ERROR/SKIPPED with per-field messages and aggregate stats.
 3. **Remap** (`PATCH /imports/:id/mapping`) — user corrects Excel header → field mapping, rows re-validated.
-4. **Commit** (`POST /imports/:id/commit`) — single Prisma transaction: upsert Sprints, Epics, unclaimed-User stubs (by name), create Tasks in correct column, link `ImportRow.createdTaskId`, write audit log.
+4. **Commit** (`POST /imports/:id/commit`) — body may include `projectId`; service resolves/falls back to first workspace project. Transaction: adopt or create project-scoped sprints, epics with `projectId`, tasks with `projectId`, `TaskAssignment` from hour columns, reconcile null `projectId` on batch, audit log. Returns `projectId` for client cache invalidation.
 5. **Rollback** (`POST /imports/:id/rollback`) — deletes all tasks created by this import; import status → ROLLED_BACK.
 
 **Decimal ID preservation:** `readCell()` uses SheetJS `cell.w` (Excel-formatted text) before falling back to `String(cell.v)`. This preserves "0.7", "13.5", "22.3" as strings.
@@ -199,20 +233,19 @@ pnpm db:seed         # admin@sprintflow.local / Admin1234!
 
 # 5. Start both services (two terminals)
 pnpm --filter @sprintflow/api dev    # http://localhost:3001
-pnpm --filter @sprintflow/web dev    # http://localhost:3000
+pnpm --filter @sprintflow/web dev    # http://localhost:3002
+
+# Or: pnpm dev
 ```
 
 **Verification flow:**
-1. Open `http://localhost:3000` → redirects to `/login`
+1. Open `http://localhost:3002` → `/login` → `/overview`
 2. Log in as `admin@sprintflow.local` / `Admin1234!`
-3. Redirects to `/board` (empty — 5 columns, no tasks yet)
-4. Click "Import workbook" → upload the company's Excel file
-5. Step 1: file analysed, "Master Task List" detected
-6. Step 2: column mapping shown (editable)
-7. Step 3: ~46 rows previewed, decimal IDs intact (e.g. "0.7", "13.5")
-8. Step 4: commit → "Import complete! X tasks created"
-9. Return to `/board` → tasks appear in correct columns
-10. Drag a card to another column → refresh → persists; activity log records the move
+3. Sidebar → **Import** → upload CARR / Master Task List `.xlsx`
+4. Map columns → preview shows **Importing into: &lt;project&gt;**
+5. Commit → **View project overview** — sprint health cards populated
+6. Sidebar sprints → open sprint board; **Flow** for Kanban DnD
+7. Re-import same file to upsert by `externalId` without duplicates
 
 ---
 
@@ -348,21 +381,19 @@ curl -I http://localhost:3000              # → HTTP 200
 
 ---
 
-## MVP Status: Complete
+## MVP + Scrum platform status
 
-All six phases shipped. The system delivers the core promise:
+Phases 0–6 shipped. Core promise:
 
-> A manager uploads the Excel workbook they already use. Within a minute they have a fully interactive Scrum board. No manual data entry.
+> Upload the Excel workbook you already use. Within a minute you have a project Overview, sprint boards, capacity views, and a Flow Kanban — no manual re-entry.
 
 **What's been built:**
-- Excel → board in under a minute (full import pipeline)
-- Kanban board with drag-and-drop task + column reorder
-- Sprint / Backlog / Owner views
-- Filters: sprint · owner · epic · priority
-- Task detail drawer: edit all fields, sprint/epic/owner selectors, comments, activity feed
-- JWT auth with rotating refresh tokens
-- Full audit trail (every task move, update, import, comment)
+- Excel → **project dashboard** + Flow board (import binds to active project)
+- Scrum: Overview, per-sprint board, My Work, Team, Backlog, onboarding wizard
+- Flow: Kanban DnD, filters (P0/P1/P2), task drawer
+- `Project` / `ProjectMember` / `TaskAssignment` model for CARR-style hour planning
+- JWT auth, workspace membership checks on sensitive routes, audit trail
 - Production Docker Compose deployment
-- AI interfaces ready for future implementation (see `AI_ROADMAP.md`)
+- AI interfaces ready (see `AI_ROADMAP.md`)
 
 The original architecture plan: `C:\Users\surya\.claude\plans\claude-code-master-jaunty-steele.md`

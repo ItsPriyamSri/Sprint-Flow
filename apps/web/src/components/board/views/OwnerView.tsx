@@ -5,13 +5,12 @@ import { columnLabelForTask } from '@/lib/api/boards';
 import { useBoardStore } from '@/store/board.store';
 
 const PRIORITY_COLORS: Record<string, string> = {
-  LOW:      'bg-slate-100 text-slate-600',
-  MEDIUM:   'bg-blue-100 text-blue-700',
-  HIGH:     'bg-orange-100 text-orange-700',
-  CRITICAL: 'bg-red-100 text-red-700',
+  P0: 'bg-red-100 text-red-700',
+  P1: 'bg-amber-100 text-amber-700',
+  P2: 'bg-slate-100 text-slate-600',
 };
 
-const PRANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+const PRANK: Record<string, number> = { P0: 3, P1: 2, P2: 1 };
 
 interface TaskWithCol extends BoardTask {}
 
@@ -22,10 +21,10 @@ export function OwnerView({ board }: Props) {
 
   const allTasks: TaskWithCol[] = board.columns.flatMap((col) => col.tasks);
 
-  // Group by assigneeName
+  // Group by first assignment member name (or unassigned)
   const groups = new Map<string, TaskWithCol[]>();
   for (const task of allTasks) {
-    const key = task.assigneeName ?? '__unassigned__';
+    const key = task.assignments?.[0]?.memberName ?? '__unassigned__';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(task);
   }
