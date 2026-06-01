@@ -136,8 +136,9 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
     const allTasks = await prisma.task.findMany({
       where: { sprintId: { in: allSprintIds } },
       select: {
-        id: true, sprintId: true, priority: true, done: true, updatedAt: true,
+        id: true, sprintId: true, priority: true, done: true, blocked: true, updatedAt: true,
         assignments: { select: { projectMemberId: true, hours: true } },
+        column: { select: { key: true } },
       },
     });
 
@@ -176,13 +177,21 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
         };
       });
 
+      const completedTasks = sprintTasks.filter((t) => t.done).length;
+      const blockedTasks = sprintTasks.filter((t) => t.blocked).length;
+      const todoTasks = sprintTasks.filter((t) => !t.done && !t.blocked && (t.column?.key === 'todo' || t.column?.key === 'backlog')).length;
+      const inProgressTasks = sprintTasks.filter((t) => !t.done && !t.blocked && (t.column?.key === 'in_progress' || t.column?.key === 'review')).length;
+
       return {
         sprint: sprintDto(sprint),
         budgetHours: budget,
         plannedHours,
         bufferHours: budget - plannedHours,
-        completedTasks: sprintTasks.filter((t) => t.done).length,
+        completedTasks,
         totalTasks: sprintTasks.length,
+        blockedTasks,
+        todoTasks,
+        inProgressTasks,
         memberWorkload,
       };
     });
@@ -542,6 +551,8 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
         epicName: t.epic?.name ?? null,
         epicColor: t.epic?.color ?? null,
         done: t.done,
+        blocked: t.blocked,
+        blockedReason: t.blockedReason,
         deferred: t.deferred,
         deferredReason: t.deferredReason,
         assignments: t.assignments.map((x) => ({
@@ -647,6 +658,8 @@ projectsRouter.get('/:projectId/backlog', async (req: Request, res: Response, ne
         epicName: t.epic?.name ?? null,
         epicColor: t.epic?.color ?? null,
         done: t.done,
+        blocked: t.blocked,
+        blockedReason: t.blockedReason,
         deferred: t.deferred,
         deferredReason: t.deferredReason,
         assignments: t.assignments.map((a) => ({
@@ -718,5 +731,128 @@ projectsRouter.get('/:projectId/team', async (req: Request, res: Response, next:
     });
 
     res.json({ project: { id: project.id, name: project.name }, team: teamData });
+  } catch (e) { next(e); }
+});
+
+// ── Reporting Dashboard ──────────────────────────────────────────────────────
+projectsRouter.get('/:projectId/dashboard', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectAccess(projectId, req.user!.id);
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: { include: { user: { select: { id: true, name: true, email: true, status: true } } } },
+        sprints: { orderBy: { position: 'asc' } },
+        epics:   { orderBy: { name: 'asc' } },
+      },
+    });
+    if (!project) throw new NotFoundError('Project');
+
+    // Fetch all tasks in this project
+    const allTasks = await prisma.task.findMany({
+      where: { projectId },
+      include: {
+        assignments: true,
+        column: { select: { key: true } },
+      },
+    });
+
+    // Summary metrics
+    const totalTasks = allTasks.length;
+    const completedTasks = allTasks.filter(t => t.done).length;
+    const blockedTasks = allTasks.filter(t => t.blocked).length;
+    const deferredTasks = allTasks.filter(t => t.deferred).length;
+    
+    // Backlog tasks = tasks not in any sprint, not deferred, and not done
+    const backlogTasks = allTasks.filter(t => !t.sprintId && !t.deferred && !t.done).length;
+    
+    // In progress tasks = tasks where column key is in_progress or review, done is false, blocked is false
+    const inProgressTasks = allTasks.filter(t => !t.done && !t.blocked && (t.column.key === 'in_progress' || t.column.key === 'review')).length;
+
+    // Sprint progress
+    const sprintProgress = project.sprints.map(s => {
+      const sprintTasks = allTasks.filter(t => t.sprintId === s.id && !t.deferred);
+      const total = sprintTasks.length;
+      const completed = sprintTasks.filter(t => t.done).length;
+      const blocked = sprintTasks.filter(t => t.blocked).length;
+      const inProgress = sprintTasks.filter(t => !t.done && !t.blocked && (t.column.key === 'in_progress' || t.column.key === 'review')).length;
+      const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      return {
+        sprint: sprintDto(s),
+        totalTasks: total,
+        completedTasks: completed,
+        inProgressTasks: inProgress,
+        blockedTasks: blocked,
+        completionPct,
+      };
+    });
+
+    // Owner stats
+    const ownerStats = project.members.map(m => {
+      const memberTasks = allTasks.filter(t => t.assignments.some(a => a.projectMemberId === m.id));
+      const assigned = memberTasks.length;
+      const completed = memberTasks.filter(t => t.done).length;
+      const blocked = memberTasks.filter(t => t.blocked).length;
+      const inProgress = memberTasks.filter(t => !t.done && !t.blocked && (t.column.key === 'in_progress' || t.column.key === 'review')).length;
+      
+      const committedHours = memberTasks.reduce((sum, t) => {
+        const assignment = t.assignments.find(a => a.projectMemberId === m.id);
+        return sum + (assignment ? Number(assignment.hours) : 0);
+      }, 0);
+      
+      // Capacity hours = member capacity * (days in active/planning sprints)
+      const targetSprints = project.sprints.filter(s => s.status !== 'COMPLETED');
+      const totalDays = targetSprints.reduce((sum, s) => sum + s.days, 0);
+      const capacityHours = m.hoursPerDay * (totalDays || 6);
+
+      const completionPct = assigned > 0 ? Math.round((completed / assigned) * 100) : 0;
+
+      return {
+        member: memberDto(m),
+        assignedTasks: assigned,
+        completedTasks: completed,
+        inProgressTasks: inProgress,
+        blockedTasks: blocked,
+        committedHours,
+        capacityHours,
+        completionPct,
+      };
+    });
+
+    // Epic progress
+    const epicProgress = project.epics.map(e => {
+      const epicTasks = allTasks.filter(t => t.epicId === e.id);
+      const total = epicTasks.length;
+      const completed = epicTasks.filter(t => t.done).length;
+      const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      return {
+        epic: {
+          id: e.id,
+          name: e.name,
+          color: e.color,
+          projectId: e.projectId,
+        },
+        totalTasks: total,
+        completedTasks: completed,
+        completionPct,
+      };
+    });
+
+    res.json({
+      project: { id: project.id, name: project.name },
+      summary: {
+        totalTasks,
+        completedTasks,
+        inProgressTasks,
+        blockedTasks,
+        backlogTasks,
+        deferredTasks,
+      },
+      sprintProgress,
+      ownerStats,
+      epicProgress,
+    });
   } catch (e) { next(e); }
 });

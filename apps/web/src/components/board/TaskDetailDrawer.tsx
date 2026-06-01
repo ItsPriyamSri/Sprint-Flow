@@ -32,8 +32,105 @@ const PRIORITY_COLOR: Record<string, string> = {
 
 const ACTION_ICONS: Record<string, string> = {
   TASK_CREATED: '✨', TASK_UPDATED: '✏️', TASK_MOVED: '➡️',
-  TASK_DELETED: '🗑', TASK_COMMENTED: '💬',
+  TASK_DELETED: '🗑', TASK_COMMENTED: '💬', TASK_BLOCKED: '🚫', TASK_UNBLOCKED: '✅',
 };
+
+function CommentItem({
+  comment, taskId, workspaceId, currentUser, onRefresh
+}: {
+  comment: TaskDetail['comments'][number];
+  taskId: string;
+  workspaceId: string;
+  currentUser: { id: string } | null;
+  onRefresh: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editBody, setEditBody] = useState(comment.body);
+  const queryClient = useQueryClient();
+
+  const editMutation = useMutation({
+    mutationFn: (body: string) => import('@/lib/api/tasks').then(api => api.updateComment(taskId, comment.id, workspaceId, body)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', taskId, workspaceId] });
+      onRefresh();
+      setIsEditing(false);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => import('@/lib/api/tasks').then(api => api.deleteComment(taskId, comment.id, workspaceId)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', taskId, workspaceId] });
+      onRefresh();
+    }
+  });
+
+  const isAuthor = currentUser && comment.author.id === currentUser.id;
+
+  return (
+    <div className="rounded-lg bg-slate-50 px-3 py-2.5 relative group border border-slate-100 hover:border-slate-200 transition-colors">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
+            {comment.author.name.slice(0, 2).toUpperCase()}
+          </div>
+          <span className="text-xs font-semibold text-slate-700">{comment.author.name}</span>
+          <span className="text-[10px] text-slate-400">{timeAgo(comment.createdAt)}</span>
+        </div>
+        
+        {isAuthor && !isEditing && (
+          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
+            <button
+              onClick={() => { setIsEditing(true); setEditBody(comment.body); }}
+              className="text-[10px] text-slate-400 hover:text-indigo-650 hover:text-indigo-600 font-semibold"
+            >
+              Edit
+            </button>
+            <span className="text-[10px] text-slate-300">•</span>
+            <button
+              onClick={() => {
+                if (window.confirm('Delete comment? This cannot be undone.')) {
+                  deleteMutation.mutate();
+                }
+              }}
+              className="text-[10px] text-slate-400 hover:text-red-600 font-semibold"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+
+      {isEditing ? (
+        <div className="mt-2 space-y-1.5">
+          <textarea
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            rows={2}
+            className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none bg-white resize-none"
+          />
+          <div className="flex justify-end gap-1.5">
+            <button
+              onClick={() => setIsEditing(false)}
+              className="rounded px-2 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-100"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { if (editBody.trim() && editBody !== comment.body) editMutation.mutate(editBody.trim()); }}
+              disabled={!editBody.trim() || editBody === comment.body || editMutation.isPending}
+              className="rounded bg-indigo-600 px-2.5 py-0.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-1.5 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{comment.body}</p>
+      )}
+    </div>
+  );
+}
 
 interface FormState {
   title: string;
@@ -43,12 +140,14 @@ interface FormState {
   externalId: string;
   sprintId: string;
   epicId: string;
+  blocked: boolean;
+  blockedReason: string;
 }
 
 function emptyForm(): FormState {
   return {
     title: '', description: '', notes: '', priority: '', externalId: '',
-    sprintId: '', epicId: '',
+    sprintId: '', epicId: '', blocked: false, blockedReason: '',
   };
 }
 
@@ -61,6 +160,8 @@ function taskToForm(task: NonNullable<Awaited<ReturnType<typeof getTask>>>): For
     externalId: task.externalId ?? '',
     sprintId: task.sprintId ?? '',
     epicId: task.epicId ?? '',
+    blocked: task.blocked,
+    blockedReason: task.blockedReason ?? '',
   };
 }
 
@@ -80,6 +181,7 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
   const [mounted, setMounted] = useState(false);
   const formInitForTask = useRef<string | null>(null);
   const authWorkspaceId = useAuthStore((s) => s.defaultWorkspaceId);
+  const user = useAuthStore((s) => s.user);
 
   const wsId = workspaceId || authWorkspaceId || '';
 
@@ -224,6 +326,8 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
         externalId: form.externalId.trim() || null,
         sprintId: form.sprintId || null,
         epicId: form.epicId || null,
+        blocked: form.blocked,
+        blockedReason: form.blocked ? form.blockedReason.trim() || null : null,
       },
     });
   };
@@ -362,6 +466,39 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
                 </select>
               </div>
 
+              {/* Blocked Status */}
+              <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Blocked Status</span>
+                    <span className="text-[11px] text-slate-400">Mark this task as blocked / impeded</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={form.blocked}
+                      onChange={(e) => setForm(f => ({ ...f, blocked: e.target.checked }))}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-650 peer-checked:bg-red-600" />
+                  </label>
+                </div>
+
+                {form.blocked && (
+                  <div className="mt-3 animate-fadeIn">
+                    <label className={labelCls}>Reason for Block *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Waiting on API deployment"
+                      value={form.blockedReason}
+                      onChange={(e) => setForm(f => ({ ...f, blockedReason: e.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                )}
+              </div>
+
               {task && task.assignments && task.assignments.length > 0 && (
                 <div>
                   <label className={labelCls}>Assignments</label>
@@ -403,16 +540,14 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
                   <h3 className="mb-3 text-xs font-medium text-slate-500">Comments</h3>
                   <div className="space-y-3">
                     {task.comments.map((c) => (
-                      <div key={c.id} className="rounded-lg bg-slate-50 px-3 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
-                            {c.author.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <span className="text-xs font-medium text-slate-700">{c.author.name}</span>
-                          <span className="text-xs text-slate-400">{timeAgo(c.createdAt)}</span>
-                        </div>
-                        <p className="mt-1.5 text-sm text-slate-600">{c.body}</p>
-                      </div>
+                      <CommentItem
+                        key={c.id}
+                        comment={c}
+                        taskId={task.id}
+                        workspaceId={wsId}
+                        currentUser={user}
+                        onRefresh={() => {}}
+                      />
                     ))}
                   </div>
                 </div>

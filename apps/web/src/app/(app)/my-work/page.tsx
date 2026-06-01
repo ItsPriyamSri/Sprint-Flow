@@ -6,108 +6,205 @@ import { getMyWork } from '@/lib/api/projects';
 import type { MyWorkDto, MyWorkTaskDto } from '@sprintflow/shared';
 
 const PRIORITY_COLORS: Record<string, string> = {
-  P0: 'bg-red-100 text-red-700',
-  P1: 'bg-amber-100 text-amber-700',
-  P2: 'bg-slate-100 text-slate-500',
+  P0: 'bg-red-50 text-red-700 border-red-200/60',
+  P1: 'bg-amber-50 text-amber-700 border-amber-200/60',
+  P2: 'bg-slate-50 text-slate-600 border-slate-200/60',
+};
+
+const PRIORITY_RIBBONS: Record<string, string> = {
+  P0: 'bg-gradient-to-b from-red-400 to-rose-500',
+  P1: 'bg-gradient-to-b from-amber-400 to-orange-500',
+  P2: 'bg-gradient-to-b from-slate-300 to-slate-400',
 };
 
 function TaskCard({ task }: { task: MyWorkTaskDto }) {
+  const priorityRibbon = task.priority ? PRIORITY_RIBBONS[task.priority] : 'bg-slate-200';
+  const cardBorder = task.blocked 
+    ? 'border-red-200 shadow-[0_4px_12px_rgba(244,63,94,0.01)] bg-red-50/5 hover:shadow-[0_8px_30px_rgba(244,63,94,0.04)] hover:border-red-300' 
+    : 'border-slate-200/70 bg-white hover:shadow-[0_8px_30px_rgb(0,0,0,0.025)] hover:border-slate-300';
+
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-4 ${task.done ? 'opacity-50' : ''}`}>
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex-shrink-0">
+    <div className={`relative overflow-hidden rounded-2xl border p-5 pl-6 transition-all duration-300 ease-out hover:-translate-y-1 ${cardBorder} ${task.done ? 'opacity-55' : ''}`}>
+      {/* Priority accent side ribbon */}
+      <span className={`absolute left-0 top-0 bottom-0 w-[5px] ${priorityRibbon}`} />
+
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
           {task.priority && (
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${PRIORITY_COLORS[task.priority] ?? ''}`}>
+            <span className={`rounded-md border px-2 py-0.5 text-[9px] font-extrabold tracking-wide uppercase ${PRIORITY_COLORS[task.priority] ?? ''}`}>
               {task.priority}
             </span>
           )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className={`text-sm font-medium text-slate-800 ${task.done ? 'line-through' : ''}`}>
-            {task.title}
-          </p>
-          {task.epicName && (
-            <p className="mt-0.5 text-xs text-slate-400">{task.epicName}</p>
+          {task.blocked && (
+            <span className="rounded-md bg-rose-50 border border-rose-100 px-2 py-0.5 text-[9px] font-extrabold text-rose-600 uppercase tracking-wide flex items-center gap-0.5 animate-pulse">
+              <span>🚫</span> Blocked
+            </span>
           )}
         </div>
-      </div>
-      <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-        <span className="font-mono">{task.myHours}h assigned</span>
-        <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-600">
-          ~{task.dailyTarget}h/day
-        </span>
+
+        <div className="min-w-0">
+          <p className={`text-sm font-bold text-slate-800 tracking-tight leading-snug ${task.done ? 'line-through text-slate-400' : ''}`}>
+            {task.title}
+          </p>
+          
+          {task.blocked && task.blockedReason && (
+            <div className="mt-2.5 rounded-xl border border-rose-100 bg-rose-50/30 px-3 py-2 text-xs font-semibold text-rose-700 leading-normal">
+              <span className="font-bold uppercase tracking-wider text-[9px] text-rose-600 block mb-0.5">Blocker Reason</span>
+              {task.blockedReason}
+            </div>
+          )}
+          
+          {task.epicName && (
+            <div className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: task.epicColor || '#6366f1' }} />
+              <span className="truncate">{task.epicName}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between border-t border-slate-100/80 pt-3.5 text-xs text-slate-500 font-medium">
+          <span className="font-mono bg-slate-50 border border-slate-100/60 rounded-md px-2 py-0.5">{task.myHours}h committed</span>
+          <span className="rounded-lg bg-indigo-50/80 border border-indigo-100/50 px-2.5 py-0.5 font-bold text-indigo-600 text-[10px]">
+            ~{task.dailyTarget}h / day
+          </span>
+        </div>
       </div>
     </div>
   );
 }
 
 function MyWorkContent({ data }: { data: MyWorkDto }) {
-  const pendingFocus = data.todayFocus.filter((t) => !t.done);
-  const p0Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P0' && !t.done);
-  const p1Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P1' && !t.done);
-  const p2Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P2' && !t.done);
+  const pendingFocus = data.todayFocus.filter((t) => !t.done && !t.blocked);
+  const p0Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P0' && !t.done && !t.blocked);
+  const p1Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P1' && !t.done && !t.blocked);
+  const p2Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P2' && !t.done && !t.blocked);
+  const blockedTasks = data.currentSprintTasks.filter((t) => t.blocked && !t.done);
   const doneTasks = data.currentSprintTasks.filter((t) => t.done);
 
+  // Sort blocked tasks in priority order: P0, then P1, then P2/others
+  const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2 };
+  blockedTasks.sort(
+    (a, b) =>
+      (PRIORITY_ORDER[a.priority ?? 'P2'] ?? 2) -
+      (PRIORITY_ORDER[b.priority ?? 'P2'] ?? 2)
+  );
+
+  const totalMyTasks = data.currentSprintTasks.length;
+  const completedMyTasks = doneTasks.length;
+  const completionRate = totalMyTasks > 0 ? Math.round((completedMyTasks / totalMyTasks) * 100) : 0;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="border-b border-slate-200 bg-white px-6 py-4">
-        <h1 className="text-xl font-bold text-slate-900">My Work</h1>
-        {data.currentSprint && (
-          <p className="mt-0.5 text-sm text-slate-500">
-            {data.currentSprint.name} · {data.daysRemaining} day{data.daysRemaining !== 1 ? 's' : ''} remaining
-          </p>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-slate-50/30">
+      {/* Premium Header Banner with Personal Progress Indicator */}
+      <div className="relative overflow-hidden border-b border-slate-200/80 bg-white px-8 py-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-indigo-50/30 blur-3xl" />
+        
+        <div className="relative flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-indigo-600">
+            <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+            My Dashboard
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">My Work</h1>
+          {data.currentSprint && (
+            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+              Active Sprint:{' '}
+              <span className="font-semibold text-slate-800">{data.currentSprint.name}</span>
+              {' '}·{' '}
+              <span className="rounded-full bg-indigo-50/80 px-2 py-0.5 font-bold text-indigo-600 text-[10px] border border-indigo-100/50">
+                {data.daysRemaining} day{data.daysRemaining !== 1 ? 's' : ''} left
+              </span>
+            </p>
+          )}
+        </div>
+
+        {/* Mini progress tracker ring/widget */}
+        {totalMyTasks > 0 && (
+          <div className="relative flex items-center gap-4 bg-slate-50/60 border border-slate-200/60 rounded-2xl px-5 py-3 shadow-inner">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">My Progress</span>
+              <span className="text-sm font-black text-slate-800">{completedMyTasks} / {totalMyTasks} tasks done</span>
+            </div>
+            <div className="relative h-12 w-12 flex-shrink-0 flex items-center justify-center">
+              <svg className="h-full w-full transform -rotate-90">
+                <circle cx="24" cy="24" r="20" stroke="#f1f5f9" strokeWidth="4" fill="transparent" />
+                <circle cx="24" cy="24" r="20" stroke="#6366f1" strokeWidth="4" fill="transparent"
+                  strokeDasharray={`${2 * Math.PI * 20}`}
+                  strokeDashoffset={`${2 * Math.PI * 20 * (1 - completionRate / 100)}`}
+                  strokeLinecap="round" />
+              </svg>
+              <span className="absolute text-[10px] font-extrabold text-indigo-600">{completionRate}%</span>
+            </div>
+          </div>
         )}
       </div>
 
-      <div className="flex-1 px-6 py-6 space-y-8">
+      <div className="flex-1 px-8 py-8 space-y-9 max-w-[1400px] w-full mx-auto">
         {/* Today's focus */}
         {pendingFocus.length > 0 && (
-          <section>
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">⚡</span>
-              Today's focus
+          <section className="space-y-4">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
+              <span className="flex h-6 w-6 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 text-xs shadow-sm">⚡</span>
+              Today's Focus
             </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
               {pendingFocus.map((t) => <TaskCard key={t.id} task={t} />)}
             </div>
           </section>
         )}
 
-        {/* P0 */}
-        {p0Tasks.length > 0 && (
-          <section>
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <span className="rounded px-1.5 py-0.5 bg-red-100 text-[10px] font-bold text-red-700">P0</span>
-              Must ship
+        {/* Blocked Tasks (Surfaced proudly) */}
+        {blockedTasks.length > 0 && (
+          <section className="rounded-2xl border border-rose-200/60 bg-rose-50/10 p-6 shadow-[0_2px_12px_rgba(244,63,94,0.01)] space-y-4 animate-pulse">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-rose-700 uppercase tracking-wider">
+              <span className="flex h-6 w-6 items-center justify-center rounded-xl bg-rose-500 text-white text-xs shadow-md">🚫</span>
+              Blocked Tasks ({blockedTasks.length})
             </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
+              {blockedTasks.map((t) => <TaskCard key={t.id} task={t} />)}
+            </div>
+          </section>
+        )}
+
+        {/* P0 - Must Ship */}
+        {p0Tasks.length > 0 && (
+          <section className="space-y-4">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
+              <span className="rounded-lg border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-black text-red-600 shadow-sm">P0</span>
+              Must Ship
+            </h2>
+            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
               {p0Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
             </div>
           </section>
         )}
 
-        {/* P1 */}
+        {/* P1 - Should Ship */}
         {p1Tasks.length > 0 && (
-          <section>
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <span className="rounded px-1.5 py-0.5 bg-amber-100 text-[10px] font-bold text-amber-700">P1</span>
-              Should ship
+          <section className="space-y-4">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
+              <span className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-black text-amber-600 shadow-sm">P1</span>
+              Should Ship
             </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
               {p1Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
             </div>
           </section>
         )}
 
-        {/* P2 */}
+        {/* P2 - Nice to Have */}
         {p2Tasks.length > 0 && (
-          <section>
-            <details>
-              <summary className="mb-3 flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-700">
-                <span className="rounded px-1.5 py-0.5 bg-slate-100 text-[10px] font-bold text-slate-500">P2</span>
-                Nice-to-have ({p2Tasks.length})
+          <section className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <details className="group/details">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-slate-700 uppercase tracking-wider select-none">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-black text-slate-500">P2</span>
+                  Nice-to-have ({p2Tasks.length})
+                </div>
+                <svg className="h-4 w-4 text-slate-400 group-open/details:rotate-180 transition-transform duration-250" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </summary>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-5 grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in">
                 {p2Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
               </div>
             </details>
@@ -116,21 +213,25 @@ function MyWorkContent({ data }: { data: MyWorkDto }) {
 
         {/* Upcoming */}
         {data.upcomingTasks.length > 0 && (
-          <section>
-            <h2 className="mb-3 text-sm font-semibold text-slate-400">Upcoming sprints</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 opacity-60">
+          <section className="space-y-4">
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Upcoming sprints</h2>
+            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3 opacity-60">
               {data.upcomingTasks.slice(0, 6).map((t) => <TaskCard key={t.id} task={t} />)}
             </div>
           </section>
         )}
 
+        {/* Completed list */}
         {doneTasks.length > 0 && (
-          <section>
-            <details>
-              <summary className="mb-2 cursor-pointer list-none text-xs font-medium text-slate-400">
-                {doneTasks.length} completed
+          <section className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <details className="group/details">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider select-none">
+                <span>Completed Tasks ({doneTasks.length})</span>
+                <svg className="h-4 w-4 text-slate-400 group-open/details:rotate-180 transition-transform duration-250" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </summary>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 opacity-50">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 opacity-60 animate-fade-in">
                 {doneTasks.map((t) => <TaskCard key={t.id} task={t} />)}
               </div>
             </details>
@@ -152,13 +253,41 @@ export default function MyWorkPage() {
   });
 
   if (!activeProjectId) {
-    return <div className="flex flex-1 items-center justify-center text-sm text-slate-400">Select a project first.</div>;
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center bg-slate-50/50 p-6 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-md border border-slate-200/60 mb-4 animate-bounce">
+          <span className="text-2xl">📁</span>
+        </div>
+        <p className="text-base font-bold text-slate-800">No active project selected</p>
+        <p className="text-xs text-slate-400 mt-1 max-w-xs">Select a project in the sidebar switcher to view your work.</p>
+      </div>
+    );
   }
   if (isLoading) {
-    return <div className="flex flex-1 items-center justify-center"><div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" /></div>;
+    return (
+      <div className="flex-1 px-6 py-6 space-y-8 animate-pulse overflow-y-auto bg-slate-50/50">
+        <div className="space-y-2">
+          <div className="h-6 w-1/4 rounded-md bg-slate-200" />
+          <div className="h-4 w-1/3 rounded-md bg-slate-200" />
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-32 rounded-2xl bg-slate-200/80" />
+          ))}
+        </div>
+      </div>
+    );
   }
   if (isError || !data) {
-    return <div className="flex flex-1 items-center justify-center text-sm text-slate-400">Failed to load your work.</div>;
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center bg-slate-50/50 p-6 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 border border-red-200 text-red-500 mb-4 shadow-sm">
+          <span className="text-2xl">⚠️</span>
+        </div>
+        <p className="text-base font-bold text-slate-800">Failed to load your work</p>
+        <p className="text-xs text-slate-400 mt-1">Please try refreshing or choosing a different project.</p>
+      </div>
+    );
   }
 
   return <MyWorkContent data={data} />;

@@ -70,6 +70,9 @@ export interface SprintHealthDto {
   bufferHours: number; // budget - planned
   completedTasks: number;
   totalTasks: number;
+  blockedTasks: number;
+  todoTasks: number;
+  inProgressTasks: number;
   memberWorkload: MemberWorkloadDto[];
 }
 
@@ -124,6 +127,8 @@ export interface TaskDto {
   epicName: string | null;
   epicColor: string | null;
   done: boolean;
+  blocked: boolean;
+  blockedReason: string | null;
   deferred: boolean;
   deferredReason: string | null;
   assignments: TaskAssignmentDto[];
@@ -260,4 +265,42 @@ export interface ImportMessage {
   level: 'info' | 'warning' | 'error';
   field?: string;
   message: string;
+}
+
+// ─── Dashboard DTOs ───────────────────────────────────────────────────────────
+
+export interface DashboardDto {
+  project: { id: string; name: string };
+  summary: {
+    totalTasks: number;
+    completedTasks: number;
+    inProgressTasks: number;
+    blockedTasks: number;
+    backlogTasks: number;
+    deferredTasks: number;
+  };
+  sprintProgress: Array<{
+    sprint: SprintDto;
+    totalTasks: number;
+    completedTasks: number;
+    inProgressTasks: number;
+    blockedTasks: number;
+    completionPct: number;
+  }>;
+  ownerStats: Array<{
+    member: ProjectMemberDto;
+    assignedTasks: number;
+    completedTasks: number;
+    inProgressTasks: number;
+    blockedTasks: number;
+    committedHours: number;
+    capacityHours: number;
+    completionPct: number;
+  }>;
+  epicProgress: Array<{
+    epic: EpicDto;
+    totalTasks: number;
+    completedTasks: number;
+    completionPct: number;
+  }>;
 }

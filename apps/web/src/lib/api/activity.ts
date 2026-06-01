@@ -43,6 +43,11 @@ export function describeActivity(entry: ActivityEntry): string {
       const changed = Object.keys(d.before);
       return `updated ${changed.join(', ')}`;
     }
+    case 'TASK_BLOCKED': {
+      const reason = d?.after ? String((d.after as Record<string, unknown>)['blockedReason'] || '') : '';
+      return `blocked this task${reason ? ` (${reason})` : ''}`;
+    }
+    case 'TASK_UNBLOCKED': return 'unblocked this task';
     case 'IMPORT_COMMITTED': return `imported ${d?.committed ?? 0} tasks`;
     case 'IMPORT_ROLLED_BACK': return `rolled back import (${d?.deletedTasks ?? 0} tasks removed)`;
     case 'SPRINT_CREATED':  return 'created a sprint';

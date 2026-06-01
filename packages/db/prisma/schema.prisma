@@ -71,6 +71,8 @@ enum ActivityAction {
   TASK_COMMENTED
   TASK_DONE
   TASK_DEFERRED
+  TASK_BLOCKED
+  TASK_UNBLOCKED
   IMPORT_STARTED
   IMPORT_COMMITTED
   IMPORT_ROLLED_BACK
@@ -301,6 +303,8 @@ model Task {
   sprintId       String?
   epicId         String?
   done           Boolean       @default(false) // completion toggle
+  blocked        Boolean       @default(false)
+  blockedReason  String?
   deferred       Boolean       @default(false) // cut from sprint, lives in backlog
   deferredReason String?
   position       Float // fractional for O(1) reorder within column

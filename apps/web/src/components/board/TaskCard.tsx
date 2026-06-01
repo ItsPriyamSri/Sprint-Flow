@@ -55,7 +55,9 @@ export function TaskCard({ task, columnId, onEdit }: Props) {
       style={style}
       {...dragListeners}
       {...attributes}
-      className="group relative cursor-grab rounded-lg border border-slate-200 bg-white p-3 shadow-sm hover:border-indigo-300 hover:shadow-md active:cursor-grabbing"
+      className={`group relative cursor-grab rounded-lg border border-slate-200 bg-white p-3 shadow-sm hover:border-indigo-300 hover:shadow-md active:cursor-grabbing ${
+        task.blocked ? 'border-l-4 border-l-red-500 bg-red-50/5' : ''
+      }`}
     >
       <button
         type="button"
@@ -74,6 +76,11 @@ export function TaskCard({ task, columnId, onEdit }: Props) {
       <p className="pr-12 text-sm font-medium leading-snug text-slate-800 line-clamp-3">{task.title}</p>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
+        {task.blocked && (
+          <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 animate-pulse" title={task.blockedReason || 'Blocked'}>
+            🚫 Blocked
+          </span>
+        )}
         {task.externalId && (
           <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
             #{task.externalId}

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createTask } from '@/lib/api/tasks';
-import { updateBoardCache } from '@/lib/api/boards';
+import { updateBoardCache, boardTaskFromDetail } from '@/lib/api/boards';
 import { useBoardStore } from '@/store/board.store';
 
 interface Props {
@@ -31,28 +31,7 @@ export function CreateTaskForm({ columnId, boardId, workspaceId }: Props) {
                 ...col,
                 tasks: [
                   ...col.tasks,
-                  {
-                    id: newTask.id,
-                    externalId: newTask.externalId,
-                    title: newTask.title,
-                    description: newTask.description,
-                    notes: newTask.notes,
-                    priority: newTask.priority,
-                    columnId: newTask.columnId,
-                    projectId: newTask.projectId,
-                    sprintId: newTask.sprintId,
-                    sprintName: newTask.sprint?.name ?? null,
-                    epicId: newTask.epicId,
-                    epicName: newTask.epic?.name ?? null,
-                    epicColor: newTask.epic?.color ?? null,
-                    done: newTask.done,
-                    deferred: newTask.deferred,
-                    deferredReason: newTask.deferredReason,
-                    assignments: newTask.assignments ?? [],
-                    position: newTask.position,
-                    createdAt: newTask.createdAt,
-                    updatedAt: newTask.updatedAt,
-                  },
+                  boardTaskFromDetail(newTask),
                 ],
               },
         ),

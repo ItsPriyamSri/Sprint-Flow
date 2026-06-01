@@ -24,6 +24,8 @@ export interface BoardTask {
   epicName: string | null;
   epicColor: string | null;
   done: boolean;
+  blocked: boolean;
+  blockedReason: string | null;
   deferred: boolean;
   deferredReason: string | null;
   assignments: TaskAssignment[];
@@ -189,6 +191,8 @@ export function boardTaskFromDetail(task: TaskDetail): BoardTask {
     epicName: task.epic?.name ?? null,
     epicColor: task.epic?.color ?? null,
     done: task.done,
+    blocked: task.blocked,
+    blockedReason: task.blockedReason,
     deferred: task.deferred,
     deferredReason: task.deferredReason,
     assignments: task.assignments,

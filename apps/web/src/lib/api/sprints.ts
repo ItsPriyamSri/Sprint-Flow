@@ -7,10 +7,24 @@ export async function listSprints(workspaceId: string) {
   return apiFetch<{ data: SprintDto[] }>(`/sprints?workspaceId=${workspaceId}`);
 }
 
-export async function createSprint(workspaceId: string, name: string) {
+export async function createSprint(
+  workspaceId: string,
+  input: {
+    projectId?: string;
+    name: string;
+    goal?: string;
+    days?: number;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    releaseMilestone?: boolean;
+    releaseLabel?: string;
+    releaseDate?: string;
+  },
+) {
   return apiFetch<SprintDto>('/sprints', {
     method: 'POST',
-    body: JSON.stringify({ workspaceId, name }),
+    body: JSON.stringify({ workspaceId, ...input }),
   });
 }
 

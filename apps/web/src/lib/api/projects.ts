@@ -1,10 +1,10 @@
 import { apiFetch } from './client';
 import type {
   ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto,
-  ProjectMemberDto, TeamViewDto,
+  ProjectMemberDto, TeamViewDto, DashboardDto,
 } from '@sprintflow/shared';
 
-export type { ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto, ProjectMemberDto, TeamViewDto };
+export type { ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto, ProjectMemberDto, TeamViewDto, DashboardDto };
 
 export async function listProjects(workspaceId?: string): Promise<{ data: ProjectDto[] }> {
   const qs = workspaceId ? `?workspaceId=${workspaceId}` : '';
@@ -83,4 +83,8 @@ export async function updateEpic(
     method: 'PATCH',
     body: JSON.stringify(patch),
   });
+}
+
+export async function getProjectDashboard(projectId: string): Promise<DashboardDto> {
+  return apiFetch(`/projects/${projectId}/dashboard`);
 }

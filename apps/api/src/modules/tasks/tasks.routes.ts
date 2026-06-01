@@ -52,6 +52,8 @@ tasksRouter.post(
       epicId: z.string().optional(),
       externalId: z.string().max(50).optional(),
       done: z.boolean().optional(),
+      blocked: z.boolean().optional(),
+      blockedReason: z.string().max(500).optional().nullable(),
       deferred: z.boolean().optional(),
       deferredReason: z.string().max(500).optional().nullable(),
     }),
@@ -87,6 +89,8 @@ tasksRouter.patch(
       columnId:      z.string().optional(),
       externalId:    z.string().max(50).optional().nullable(),
       done:          z.boolean().optional(),
+      blocked:       z.boolean().optional(),
+      blockedReason: z.string().max(500).optional().nullable(),
       deferred:      z.boolean().optional(),
       deferredReason: z.string().max(500).optional().nullable(),
       projectId:     z.string().optional().nullable(),
@@ -175,6 +179,38 @@ tasksRouter.post(
         (req.body as { body: string }).body,
       );
       res.status(201).json(comment);
+    } catch (e) { next(e); }
+  },
+);
+
+tasksRouter.patch(
+  '/:taskId/comments/:commentId',
+  validate(z.object({ body: z.string().min(1).max(5000) })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const comment = await svc.updateComment(
+        paramStr(req, 'taskId'),
+        paramStr(req, 'commentId'),
+        wsId(req),
+        req.user!.id,
+        (req.body as { body: string }).body,
+      );
+      res.json(comment);
+    } catch (e) { next(e); }
+  },
+);
+
+tasksRouter.delete(
+  '/:taskId/comments/:commentId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await svc.deleteComment(
+        paramStr(req, 'taskId'),
+        paramStr(req, 'commentId'),
+        wsId(req),
+        req.user!.id,
+      );
+      res.status(204).send();
     } catch (e) { next(e); }
   },
 );

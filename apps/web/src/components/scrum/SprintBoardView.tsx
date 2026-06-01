@@ -494,13 +494,14 @@ function EpicHeaderEdit({
 
 // ── Interactive Sprint Header ───────────────────────────────────────────────
 function EditableSprintHeader({
-  sprint, workspaceId, budgetHours, plannedHours, bufferHours, onRefresh
+  sprint, workspaceId, budgetHours, plannedHours, bufferHours, blockedCount, onRefresh
 }: {
   sprint: SprintDto;
   workspaceId: string;
   budgetHours: number;
   plannedHours: number;
   bufferHours: number;
+  blockedCount: number;
   onRefresh: () => void;
 }) {
   const [editingField, setEditingField] = useState<'name' | 'goal' | 'days' | 'dates' | 'release' | null>(null);
@@ -826,22 +827,29 @@ function EditableSprintHeader({
         </div>
 
         {/* Right section: Budget status */}
-        <div className="min-w-[200px] flex-shrink-0">
-          <div className="flex justify-between text-xs text-slate-500 mb-1">
-            <span>{plannedHours}h planned</span>
-            <span>{budgetHours}h budget</span>
+        <div className="min-w-[200px] flex-shrink-0 flex flex-col items-end gap-2">
+          {blockedCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 border border-red-100 px-3 py-1 text-xs font-bold text-red-600 animate-pulse">
+              🚫 {blockedCount} Blocked Task{blockedCount > 1 ? 's' : ''}
+            </span>
+          )}
+          <div className="w-full">
+            <div className="flex justify-between text-xs text-slate-500 mb-1">
+              <span>{plannedHours}h planned</span>
+              <span>{budgetHours}h budget</span>
+            </div>
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 shadow-inner">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ease-out ${
+                  isOver ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : usedPct > 85 ? 'bg-amber-400' : 'bg-indigo-500'
+                }`}
+                style={{ width: `${Math.min(100, usedPct)}%` }}
+              />
+            </div>
+            <p className={`mt-1 text-right text-xs font-semibold ${isOver ? 'text-red-600 animate-pulse' : 'text-emerald-600'}`}>
+              {isOver ? `${plannedHours - budgetHours}h overloaded` : `${bufferHours}h buffer`}
+            </p>
           </div>
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 shadow-inner">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ease-out ${
-                isOver ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' : usedPct > 85 ? 'bg-amber-400' : 'bg-indigo-500'
-              }`}
-              style={{ width: `${Math.min(100, usedPct)}%` }}
-            />
-          </div>
-          <p className={`mt-1 text-right text-xs font-semibold ${isOver ? 'text-red-600 animate-pulse' : 'text-emerald-600'}`}>
-            {isOver ? `${plannedHours - budgetHours}h overloaded` : `${bufferHours}h buffer`}
-          </p>
         </div>
 
       </div>
@@ -922,6 +930,116 @@ function EditableCapacity({
   );
 }
 
+// ── Blocked Status Toggle ───────────────────────────────────────────────────
+function BlockedToggle({
+  taskId, blocked, blockedReason, workspaceId, onRefresh
+}: {
+  taskId: string;
+  blocked: boolean;
+  blockedReason: string | null;
+  workspaceId: string;
+  onRefresh: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [reasonInput, setReasonInput] = useState(blockedReason || '');
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: (patch: { blocked: boolean; blockedReason: string | null }) =>
+      updateTask(taskId, workspaceId, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      onRefresh();
+      setIsOpen(false);
+    },
+  });
+
+  return (
+    <div className="relative flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => {
+          if (blocked) {
+            mutation.mutate({ blocked: false, blockedReason: null });
+          } else {
+            setIsOpen(!isOpen);
+            setReasonInput('');
+          }
+        }}
+        className={`rounded-full p-1 transition-all duration-150 transform hover:scale-110 active:scale-95 cursor-pointer ${
+          blocked 
+            ? 'text-red-600 hover:text-red-700 bg-red-100 hover:bg-red-200' 
+            : 'text-slate-350 hover:text-red-500 hover:bg-slate-50'
+        }`}
+        title={blocked ? `Blocked: ${blockedReason || 'No reason'}. Click to unblock.` : 'Mark as Blocked'}
+      >
+        <svg className="h-4 w-4" fill={blocked ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div
+          className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg animate-in fade-in slide-in-from-top-1 duration-150 text-left"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between border-b border-slate-100 pb-1 mb-1.5">
+            <span className="text-[10px] font-bold text-red-600 uppercase tracking-wide">Block Task</span>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                Reason for block *
+              </label>
+              <input
+                type="text"
+                value={reasonInput}
+                onChange={(e) => setReasonInput(e.target.value)}
+                placeholder="e.g. Waiting on design assets"
+                required
+                className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-red-400 focus:outline-none"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && reasonInput.trim()) {
+                    mutation.mutate({ blocked: true, blockedReason: reasonInput.trim() });
+                  }
+                }}
+              />
+            </div>
+            <div className="flex justify-end gap-1.5 pt-1 border-t border-slate-50 mt-2">
+              <button
+                onClick={() => setIsOpen(false)}
+                className="rounded px-2 py-1 text-[10px] font-medium text-slate-500 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (reasonInput.trim()) {
+                    mutation.mutate({ blocked: true, blockedReason: reasonInput.trim() });
+                  }
+                }}
+                disabled={!reasonInput.trim()}
+                className="rounded bg-red-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                Block Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Standard Task Row ────────────────────────────────────────────────────────
 function TaskRow({
   task, sprintDays, onEdit, onDoneToggle, members, workspaceId, onRefresh
@@ -940,7 +1058,7 @@ function TaskRow({
     <tr
       className={`group border-t border-slate-100 hover:bg-slate-50/60 transition-colors duration-200 ${
         isChecked ? 'bg-slate-50/30' : ''
-      }`}
+      } ${task.blocked ? 'border-l-4 border-l-red-500 bg-red-50/10' : ''}`}
     >
       <td className="w-8 px-3 py-2.5">
         <input
@@ -962,15 +1080,31 @@ function TaskRow({
           onRefresh={onRefresh}
         />
       </td>
-      <td className="px-2 py-2.5">
-        <EditableTitle
+      <td className="w-10 px-2 py-2.5">
+        <BlockedToggle
           taskId={task.id}
-          title={task.title}
-          done={isChecked}
+          blocked={task.blocked}
+          blockedReason={task.blockedReason}
           workspaceId={workspaceId}
           onRefresh={onRefresh}
-          onClick={() => onEdit(task.id)}
         />
+      </td>
+      <td className="px-2 py-2.5">
+        <div className="flex items-center gap-2">
+          <EditableTitle
+            taskId={task.id}
+            title={task.title}
+            done={isChecked}
+            workspaceId={workspaceId}
+            onRefresh={onRefresh}
+            onClick={() => onEdit(task.id)}
+          />
+          {task.blocked && (
+            <span className="inline-flex items-center gap-1 rounded bg-red-50 border border-red-150 px-1.5 py-0.5 text-[9px] font-bold text-red-600 tracking-wide uppercase select-none cursor-help" title={task.blockedReason || 'Blocked'}>
+              🚫 Blocked
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-3 py-2.5">
         <OwnerChips
@@ -1131,6 +1265,8 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
     epicGroups.push({ epic: null, tasks: noEpicTasks });
   }
 
+  const blockedCount = board.tasks.filter((t) => t.blocked).length;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       
@@ -1141,6 +1277,7 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
         budgetHours={board.budgetHours}
         plannedHours={board.plannedHours}
         bufferHours={board.bufferHours}
+        blockedCount={blockedCount}
         onRefresh={onRefresh}
       />
 
@@ -1151,6 +1288,7 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
             <tr className="text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <th className="w-8 py-2 px-3" />
               <th className="w-12 px-2 py-2">Pri</th>
+              <th className="w-10 px-2 py-2 text-center">🚫</th>
               <th className="px-2 py-2">Task</th>
               <th className="px-3 py-2">Owner</th>
               <th className="w-20 px-3 py-2 text-right">Hours</th>

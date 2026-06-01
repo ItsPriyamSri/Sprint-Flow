@@ -408,7 +408,7 @@ curl -I http://localhost:3000              # → HTTP 200
 
 ## MVP + Scrum platform status
 
-Phases 0–6 shipped. Core promise:
+Phases 0–8 shipped. Core promise:
 
 > Upload the Excel workbook you already use. Within a minute you have a project Overview, sprint boards, capacity views, and a Flow Kanban — no manual re-entry.
 
@@ -422,3 +422,108 @@ Phases 0–6 shipped. Core promise:
 - AI interfaces ready (see `AI_ROADMAP.md`)
 
 The original architecture plan: `C:\Users\surya\.claude\plans\claude-code-master-jaunty-steele.md`
+
+---
+
+## Phase 8 — End-to-End Scrum Workflow, Collaboration & Reporting Dashboard (2026-06-01)
+
+### What was built
+
+| Area | Detail |
+|---|---|
+| **Database Schema** | Added `blocked: Boolean` and `blockedReason: String?` to the `Task` model. Added `TASK_BLOCKED` and `TASK_UNBLOCKED` to the `ActivityAction` database enum via SQL migration `add_blocked_to_task`. |
+| **API & Backend Logic** | Updated task endpoints to audited state adjustments for blocked status changes. Implemented `PATCH` (editing) and `DELETE` (deleting) comments validation checking to verify ownership. |
+| **Web client APIs** | Registered `describeActivity` mappings, updated `TaskDetail` and `BoardTask` definitions, and added `getProjectDashboard` API hooks. |
+| **Sidebar & Modals** | Integrated `+ Create Sprint` button, configured `SprintCreateModal` fields, and mapped navigation item routing to new pages. |
+| **Project Overview** | Updated `SprintCard` items with horizontal progress bars, active status distributions (Todo · In Progress · Done · Blocked), capacity metrics, and button selectors to prevent link wrapping hydration mismatches. |
+| **Sprint Board** | Structured `BlockedToggle` control column, red-tinted blocked visual rows, and hovered reason tooltips. |
+| **Flow Board Cards** | Highlighted blocked tasks using outline crimson borders and animated pulse badges. |
+| **Task Drawers** | Built in-drawer Blocked checkboxes and reason input overlays, and integrated comment ownership modification (Edit/Delete own comments only) across both Scrum and Kanban panels. |
+| **My Work Page** | Configured dedicated red-tinted "Blocked Tasks" card grids surfaced above nice-to-have items, sorted by priority. |
+| **Backlog Page** | Appended "Blocked" validation column, displaying tooltip badges and styling blocked rows with warning indicators. |
+| **Global Activity Feed** | Created Workspace Activity Timeline rendering events chronologically, supporting infinite cursor loading, actor initials, and quick navigation. |
+| **Project Dashboard** | Designed a responsive executive interface containing: <br>1. **Project Metrics**: dynamic visual cards (Total, Completed, In-progress, Blocked with red animated pulse, Backlog, and Deferred). <br>2. **Sprint Health**: progress timelines with completion bar color-coding (green >= 80%, amber >= 50%, red < 50%). <br>3. **Workload Balance**: owner commitment vs capacity limits with overloading warnings. <br>4. **Epic Analytics**: progress bars matching database `Epic.color`. |
+
+### Verification (2026-06-01)
+
+- `pnpm exec tsc --noEmit -p apps/api` — **PASS**
+- `pnpm exec tsc --noEmit -p apps/web` — **PASS**
+- Verification of database structural changes and front-end reactivity complete with no warnings.
+
+### Bug Fixes (2026-06-01)
+
+- **API Serialization Bug Fix**: Resolved runtime filtering and visual issues where `blocked` and `blockedReason` fields were omitted in the task-to-DTO serialization. Modified the following endpoints to correctly serialize and return `blocked` and `blockedReason` fields to the web application:
+  1. `apps/api/src/modules/projects/projects.routes.ts` (My Work `taskToDto` and `/:projectId/backlog`)
+  2. `apps/api/src/modules/boards/boards.routes.ts` (`GET /boards/:boardId`)
+  3. `apps/api/src/modules/sprints/sprints.routes.ts` (`GET /:sprintId/board`)
+  This fully hydrates the frontend components on My Work, Backlog, Flow, and Sprint boards with correct blocked-state data.
+
+---
+
+## 🎬 SprintFlow Platform Live Demo Script
+
+This script provides a step-by-step narrative to showcase the entire end-to-end capabilities of SprintFlow—from importing raw Excel workbooks to executive tracking and team collaboration.
+
+### 🎭 Scene 1: The Zero-Manual-Reentry Excel Onboarding
+* **Speaker Script:** "We've all been there: team planning is stuck in Excel sheets, and moving to an interactive system usually means hours of manual re-entry. SprintFlow solves this instantly. Let's start with a blank canvas."
+* **Action:** 
+  1. Navigate to `/onboarding` or click **New Project** in the sidebar.
+  2. Click **Import Excel** tab.
+  3. Drag and drop the Excel workbook (e.g. Master Task List containing active items and deferred backlog).
+  4. Match the columns in **Step 2 (Mapping)**: verify title, priority, owner, hours, and notes columns.
+  5. In **Step 3 (Preview)**: point out the parsed stats: *51 tasks detected (45 active, 6 deferred)*.
+  6. Click **Commit Import**.
+  * **Result:** The wizard invalidates the cache, builds the workspace, creates all Sprints, Epics, Tasks, and assignments, and redirects you directly to the **Project Overview**.
+
+---
+
+### 🎭 Scene 2: Sprint Planning & Health Analytics
+* **Speaker Script:** "In less than ten seconds, our Excel spreadsheet has been turned into a fully functional Scrum project. Let's look at how our sprints are organized."
+* **Action:**
+  1. Observe the **Project Overview** page. Point out the beautiful cards representing each sprint.
+  2. Show the **Sprint Health progress bar** on active cards (task completion percentage), capacity summaries, and task distributions (Todo · In Progress · Done · Blocked counts).
+  3. Click **+ Create Sprint** in the sidebar: name it "Sprint 3", set dates, goals, and assign it to a "Release 1.0 Milestone". Submit it.
+  * **Result:** "Sprint 3" instantly appears in the sidebar sprint list under the timeline, fully reactive.
+
+---
+
+### 🎭 Scene 3: The Board, Blocked States & Collaboration
+* **Speaker Script:** "Now, let's look at sprint execution. Teams can view their epic-grouped lists or jump into the interactive Kanban Board."
+* **Action:**
+  1. Click **View Board** on a Sprint card or select **Flow view** in the sidebar.
+  2. Drag cards between columns (optimistic updates with fractional positions).
+  3. Click a task card to open the **Task Detail Drawer**.
+  4. **Toggle the Blocked checkbox**: write a block reason, e.g., *"Blocked waiting on security clearance"* and save.
+  5. Notice the visual change: the card on the board gets a thick crimson left border and a red pulsing 🚫 **Blocked** indicator badge.
+  6. Write a comment: *"I've followed up on this blocker; checking back tomorrow."* and post.
+  7. Hover over your comment, click **Edit**, modify the text, and click **Save**.
+  * **Result:** The system enforces strict ownership (only you can edit/delete your own comments) and logs audit trails.
+
+---
+
+### 🎭 Scene 4: Personal Workflows & The Backlog
+* **Speaker Script:** "Every engineer gets a personal, high-focus dashboard called My Work, and product managers can manage deferred items in the Backlog."
+* **Action:**
+  1. Navigate to the **My Work** page in the sidebar.
+  2. Point out that your assigned tasks are beautifully organized by priority: P0, P1, and Nice-to-have.
+  3. Point out the **surfaced Blocked Tasks section** right above the P2 items, highlighted with red styling. The blocker reason is displayed inside the card so you know exactly why you are blocked.
+  4. Navigate to the **Backlog** page.
+  5. Point out the table showing tasks with no sprint assigned, or marked as deferred. 
+  6. Show the **Blocked column** and the warning border on blocked backlog rows with their block reasons.
+  * **Result:** Complete team transparency. Blocker reasons are front-and-center so nothing falls through the cracks.
+
+---
+
+### 🎭 Scene 5: Workspace Timeline & The Executive Dashboard
+* **Speaker Script:** "Finally, SprintFlow provides a full workspace audit feed and an executive-level reporting dashboard, built entirely on custom CSS metrics with zero heavy graphing libraries."
+* **Action:**
+  1. Navigate to the **Activity** page.
+  2. Scroll down the beautiful timeline, showcasing actor initials, relative time stamps (e.g. *2m ago*), and dynamic action descriptions (*"blocked this task (Blocked waiting on security clearance)"*).
+  3. Click **View Task Details** link on any activity item to instantly navigate back to the item.
+  4. Navigate to the **Dashboard** page.
+  5. Present the 4 visual sections:
+     - **Summary Cards**: color-coded widgets showcasing project status counts, with an active animated pulse on the Blocked count.
+     - **Sprint Health**: progress lines displaying completion rates per sprint, highlighting the active sprint.
+     - **Workload Balance**: table demonstrating hours committed vs capacity per team member, highlighting overloaded members in a thick crimson warning.
+     - **Epic Completion**: epic-grouped analytics with progress meters rendered in the epic's database color.
+* **Concluding Script:** "From an offline Excel workbook to a live, beautiful, collaborative Scrum ecosystem in seconds. That's SprintFlow."

@@ -19,6 +19,8 @@ export interface TaskDetail {
   sprintId: string | null;
   epicId: string | null;
   done: boolean;
+  blocked: boolean;
+  blockedReason: string | null;
   deferred: boolean;
   deferredReason: string | null;
   assignments: TaskAssignment[];
@@ -71,6 +73,8 @@ export async function updateTask(
     columnId: string;
     externalId: string | null;
     done: boolean;
+    blocked: boolean;
+    blockedReason: string | null;
     deferred: boolean;
     deferredReason: string | null;
     projectId: string | null;
@@ -123,5 +127,27 @@ export async function createComment(taskId: string, workspaceId: string, body: s
   return apiFetch(`/tasks/${taskId}/comments?workspaceId=${workspaceId}`, {
     method: 'POST',
     body: JSON.stringify({ body }),
+  });
+}
+
+export async function updateComment(
+  taskId: string,
+  commentId: string,
+  workspaceId: string,
+  body: string,
+) {
+  return apiFetch(`/tasks/${taskId}/comments/${commentId}?workspaceId=${workspaceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ body }),
+  });
+}
+
+export async function deleteComment(
+  taskId: string,
+  commentId: string,
+  workspaceId: string,
+) {
+  return apiFetch(`/tasks/${taskId}/comments/${commentId}?workspaceId=${workspaceId}`, {
+    method: 'DELETE',
   });
 }

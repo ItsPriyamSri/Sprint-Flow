@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getTask, updateTask, upsertAssignment, removeAssignment, createComment } from '@/lib/api/tasks';
+import { getTask, updateTask, upsertAssignment, removeAssignment, createComment, type TaskDetail } from '@/lib/api/tasks';
 import type { ProjectMemberDto, EpicDto } from '@sprintflow/shared';
 import { confirm } from '@/store/confirm.store';
+import { useAuthStore } from '@/store/auth.store';
+import { timeAgo } from '@/lib/api/activity';
 
 interface Props {
   taskId: string;
@@ -23,15 +25,137 @@ const PRIORITY_OPTIONS = [
   { value: 'P2', label: 'P2 — Nice-to-have' },
 ];
 
+function CommentItem({
+  comment,
+  taskId,
+  workspaceId,
+  currentUser,
+  onRefresh,
+}: {
+  comment: TaskDetail['comments'][number];
+  taskId: string;
+  workspaceId: string;
+  currentUser: { id: string } | null;
+  onRefresh: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editBody, setEditBody] = useState(comment.body);
+  const queryClient = useQueryClient();
+
+  const editMutation = useMutation({
+    mutationFn: (body: string) =>
+      import('@/lib/api/tasks').then((api) =>
+        api.updateComment(taskId, comment.id, workspaceId, body)
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task', taskId, workspaceId] });
+      onRefresh();
+      setIsEditing(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      import('@/lib/api/tasks').then((api) =>
+        api.deleteComment(taskId, comment.id, workspaceId)
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task', taskId, workspaceId] });
+      onRefresh();
+    },
+  });
+
+  const isAuthor = currentUser && comment.author.id === currentUser.id;
+
+  return (
+    <div className="rounded-lg bg-slate-50 px-3 py-2.5 relative group border border-slate-100 hover:border-slate-200 transition-colors">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
+            {comment.author.name.slice(0, 2).toUpperCase()}
+          </div>
+          <span className="text-xs font-semibold text-slate-700">{comment.author.name}</span>
+          <span className="text-[10px] text-slate-400">{timeAgo(comment.createdAt)}</span>
+        </div>
+
+        {isAuthor && !isEditing && (
+          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
+            <button
+              onClick={() => {
+                setIsEditing(true);
+                setEditBody(comment.body);
+              }}
+              className="text-[10px] text-slate-400 hover:text-indigo-600 font-semibold"
+            >
+              Edit
+            </button>
+            <span className="text-[10px] text-slate-300">•</span>
+            <button
+              onClick={() => {
+                if (window.confirm('Delete comment? This cannot be undone.')) {
+                  deleteMutation.mutate();
+                }
+              }}
+              className="text-[10px] text-slate-400 hover:text-red-600 font-semibold"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+
+      {isEditing ? (
+        <div className="mt-2 space-y-1.5">
+          <textarea
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            rows={2}
+            className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none bg-white resize-none"
+          />
+          <div className="flex justify-end gap-1.5">
+            <button
+              onClick={() => setIsEditing(false)}
+              className="rounded px-2 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-100"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (editBody.trim() && editBody !== comment.body)
+                  editMutation.mutate(editBody.trim());
+              }}
+              disabled={!editBody.trim() || editBody === comment.body || editMutation.isPending}
+              className="rounded bg-indigo-600 px-2.5 py-0.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-1.5 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{comment.body}</p>
+      )}
+    </div>
+  );
+}
+
 export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, onSaved }: Props) {
   const queryClient = useQueryClient();
   const [comment, setComment] = useState('');
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const user = useAuthStore((s) => s.user);
   const [form, setForm] = useState({
-    title: '', description: '', notes: '', priority: '', epicId: '',
-    done: false, deferred: false, deferredReason: '',
+    title: '',
+    description: '',
+    notes: '',
+    priority: '',
+    epicId: '',
+    done: false,
+    blocked: false,
+    blockedReason: '',
+    deferred: false,
+    deferredReason: '',
   });
   const initRef = useRef(false);
 
@@ -54,6 +178,8 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
       priority: task.priority ?? '',
       epicId: task.epicId ?? '',
       done: task.done,
+      blocked: task.blocked,
+      blockedReason: task.blockedReason ?? '',
       deferred: task.deferred,
       deferredReason: task.deferredReason ?? '',
     });
@@ -65,9 +191,11 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
         title: form.title.trim(),
         description: form.description.trim() || null,
         notes: form.notes.trim() || null,
-        priority: form.priority as 'P0' | 'P1' | 'P2' | null || null,
+        priority: (form.priority as 'P0' | 'P1' | 'P2' | null) || null,
         epicId: form.epicId || null,
         done: form.done,
+        blocked: form.blocked,
+        blockedReason: form.blocked ? form.blockedReason.trim() || null : null,
         deferred: form.deferred,
         deferredReason: form.deferredReason.trim() || null,
       }),
@@ -107,7 +235,8 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
 
   if (!mounted) return null;
 
-  const inputCls = 'mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400';
+  const inputCls =
+    'mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400';
   const labelCls = 'block text-xs font-medium text-slate-500';
 
   const drawer = (
@@ -137,7 +266,10 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
         ) : (
           <form
             className="flex flex-1 flex-col overflow-hidden"
-            onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveMutation.mutate();
+            }}
           >
             <div className="flex-1 space-y-5 overflow-y-auto px-6 py-4">
               {/* Done toggle */}
@@ -169,7 +301,9 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
                   className={inputCls}
                 >
                   {PRIORITY_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -183,7 +317,9 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
                 >
                   <option value="">— No epic —</option>
                   {epics.map((ep) => (
-                    <option key={ep.id} value={ep.id}>{ep.name}</option>
+                    <option key={ep.id} value={ep.id}>
+                      {ep.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -195,7 +331,10 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
                   {members.map((m) => {
                     const existing = task?.assignments.find((a) => a.projectMemberId === m.id);
                     return (
-                      <div key={m.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                      <div
+                        key={m.id}
+                        className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2"
+                      >
                         <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
                           {m.name.slice(0, 2).toUpperCase()}
                         </div>
@@ -222,6 +361,41 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Blocked Status */}
+              <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">
+                      Blocked Status
+                    </span>
+                    <span className="text-[11px] text-slate-400">Mark this task as blocked / impeded</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.blocked}
+                      onChange={(e) => setForm((f) => ({ ...f, blocked: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-650 peer-checked:bg-red-600" />
+                  </label>
+                </div>
+
+                {form.blocked && (
+                  <div className="mt-3 animate-fadeIn">
+                    <label className={labelCls}>Reason for Block *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Waiting on API deployment"
+                      value={form.blockedReason}
+                      onChange={(e) => setForm((f) => ({ ...f, blockedReason: e.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -272,17 +446,16 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
               {task && task.comments.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-xs font-medium text-slate-500">Comments</h3>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {task.comments.map((c) => (
-                      <div key={c.id} className="rounded-lg bg-slate-50 px-3 py-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-slate-700">{c.author.name}</span>
-                          <span className="text-xs text-slate-400">
-                            {new Date(c.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-600">{c.body}</p>
-                      </div>
+                      <CommentItem
+                        key={c.id}
+                        comment={c}
+                        taskId={task.id}
+                        workspaceId={workspaceId}
+                        currentUser={user}
+                        onRefresh={() => {}}
+                      />
                     ))}
                   </div>
                 </div>
@@ -299,7 +472,9 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
                 />
                 <button
                   type="button"
-                  onClick={() => { if (comment.trim()) commentMutation.mutate(); }}
+                  onClick={() => {
+                    if (comment.trim()) commentMutation.mutate();
+                  }}
                   disabled={!comment.trim() || commentMutation.isPending}
                   className="mt-1 rounded-md bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 disabled:opacity-50"
                 >

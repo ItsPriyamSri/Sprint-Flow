@@ -18,6 +18,8 @@ interface CreateTaskInput {
   epicId?: string;
   externalId?: string;
   done?: boolean;
+  blocked?: boolean;
+  blockedReason?: string;
   deferred?: boolean;
   deferredReason?: string;
 }
@@ -32,6 +34,8 @@ interface UpdateTaskInput {
   columnId?: string;
   externalId?: string | null;
   done?: boolean;
+  blocked?: boolean;
+  blockedReason?: string | null;
   deferred?: boolean;
   deferredReason?: string | null;
   projectId?: string | null;
@@ -80,6 +84,7 @@ function pickDiff(
 const AUDIT_FIELDS = [
   'title', 'priority', 'columnId', 'sprintId', 'epicId',
   'notes', 'description', 'externalId', 'done', 'deferred',
+  'blocked', 'blockedReason',
 ];
 
 // ─── Task select shape ────────────────────────────────────────────────────────
@@ -121,6 +126,8 @@ export async function createTask(actorId: string, input: CreateTaskInput) {
       epicId: input.epicId,
       externalId: input.externalId,
       done: input.done ?? false,
+      blocked: input.blocked ?? false,
+      blockedReason: input.blockedReason,
       deferred: input.deferred ?? false,
       deferredReason: input.deferredReason,
       position,
@@ -174,6 +181,8 @@ export async function updateTask(
       ...(input.columnId !== undefined    && { columnId: input.columnId }),
       ...(input.externalId !== undefined  && { externalId: input.externalId }),
       ...(input.done !== undefined        && { done: input.done }),
+      ...(input.blocked !== undefined     && { blocked: input.blocked }),
+      ...(input.blockedReason !== undefined && { blockedReason: input.blockedReason }),
       ...(input.deferred !== undefined    && { deferred: input.deferred }),
       ...(input.deferredReason !== undefined && { deferredReason: input.deferredReason }),
       ...(input.projectId !== undefined   && { projectId: input.projectId }),
@@ -191,7 +200,9 @@ export async function updateTask(
       ? (input.done ? 'TASK_DONE' : 'TASK_UPDATED')
       : input.deferred !== undefined
         ? 'TASK_DEFERRED'
-        : 'TASK_UPDATED';
+        : input.blocked !== undefined
+          ? (input.blocked ? 'TASK_BLOCKED' : 'TASK_UNBLOCKED')
+          : 'TASK_UPDATED';
 
     await prisma.activityLog.create({
       data: {
@@ -324,6 +335,49 @@ export async function createComment(
   });
 
   return comment;
+}
+
+export async function updateComment(
+  taskId: string,
+  commentId: string,
+  workspaceId: string,
+  actorId: string,
+  body: string,
+) {
+  await assertWorkspaceMember(actorId, workspaceId, 'MEMBER');
+  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new NotFoundError('Comment');
+  if (comment.taskId !== taskId) throw new ForbiddenError('Comment does not belong to this task');
+  if (comment.authorId !== actorId) throw new ForbiddenError('Only the author can edit this comment');
+
+  return prisma.comment.update({
+    where: { id: commentId },
+    data: { body },
+    include: { author: { select: { id: true, name: true } } },
+  });
+}
+
+export async function deleteComment(
+  taskId: string,
+  commentId: string,
+  workspaceId: string,
+  actorId: string,
+) {
+  await assertWorkspaceMember(actorId, workspaceId, 'MEMBER');
+  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  if (!comment) throw new NotFoundError('Comment');
+  if (comment.taskId !== taskId) throw new ForbiddenError('Comment does not belong to this task');
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { userId_workspaceId: { userId: actorId, workspaceId } },
+  });
+  const isAdminOrOwner = membership && (membership.role === 'ADMIN' || membership.role === 'OWNER');
+
+  if (comment.authorId !== actorId && !isAdminOrOwner) {
+    throw new ForbiddenError('You do not have permission to delete this comment');
+  }
+
+  await prisma.comment.delete({ where: { id: commentId } });
 }
 
 // ─── Helpers for serialization ────────────────────────────────────────────────

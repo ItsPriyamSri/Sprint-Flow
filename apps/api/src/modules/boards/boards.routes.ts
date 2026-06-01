@@ -77,6 +77,8 @@ boardsRouter.get('/:boardId', async (req, res, next) => {
           epicName: t.epic?.name ?? null,
           epicColor: t.epic?.color ?? null,
           done: t.done,
+          blocked: t.blocked,
+          blockedReason: t.blockedReason,
           deferred: t.deferred,
           deferredReason: t.deferredReason,
           assignments: t.assignments.map((a) => ({
