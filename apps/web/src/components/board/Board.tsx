@@ -37,7 +37,11 @@ import { useAuthStore } from '@/store/auth.store';
 import { BoardColumn } from './BoardColumn';
 import { DragOverlayCard } from './DragOverlayCard';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
+import { ViewSwitcher } from './ViewSwitcher';
 import { FilterBar } from './FilterBar';
+import { SprintView } from './views/SprintView';
+import { BacklogView } from './views/BacklogView';
+import { OwnerView } from './views/OwnerView';
 
 interface Props {
   boardId: string;
@@ -45,7 +49,7 @@ interface Props {
 
 export function Board({ boardId }: Props) {
   const authWorkspaceId = useAuthStore((s) => s.defaultWorkspaceId);
-  const { openTask, filters } = useBoardStore();
+  const { openTask, activeView, filters } = useBoardStore();
   const queryClient = useQueryClient();
   const [activeDragTask,   setActiveDragTask]   = useState<BoardTask | null>(null);
   const [activeDragColumn, setActiveDragColumn] = useState<BoardColumnType | null>(null);
@@ -238,7 +242,8 @@ export function Board({ boardId }: Props) {
 
   // ── Shared top bar ────────────────────────────────────────────────────────
   const topBar = (
-    <div className="flex flex-wrap items-center justify-end gap-3 border-b border-slate-200 bg-white px-6 py-2.5">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-2.5">
+      <ViewSwitcher />
       <FilterBar workspaceId={workspaceId} />
     </div>
   );
@@ -268,7 +273,42 @@ export function Board({ boardId }: Props) {
     );
   }
 
-  // ── Kanban flow view ──────────────────────────────────────────────────────
+  // ── Non-board views ───────────────────────────────────────────────────────
+  if (activeView === 'sprint') {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {topBar}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SprintView board={board} />
+        </div>
+        <TaskDetailDrawer boardId={boardId} workspaceId={workspaceId} />
+      </div>
+    );
+  }
+  if (activeView === 'backlog') {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {topBar}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <BacklogView board={board} />
+        </div>
+        <TaskDetailDrawer boardId={boardId} workspaceId={workspaceId} />
+      </div>
+    );
+  }
+  if (activeView === 'owner') {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {topBar}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <OwnerView board={board} />
+        </div>
+        <TaskDetailDrawer boardId={boardId} workspaceId={workspaceId} />
+      </div>
+    );
+  }
+
+  // ── Board view (default) — DnD Kanban ─────────────────────────────────────
   return (
     <div className="flex h-full min-h-0 flex-col">
       {topBar}

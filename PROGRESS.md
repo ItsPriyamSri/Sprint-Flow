@@ -32,6 +32,11 @@
 - `pnpm exec tsc --noEmit -p apps/web` — pass  
 - No automated import/overview tests yet — manual: import → **View project overview** → confirm sprint cards and sidebar sprints
 
+### Import preview / commit fix (2026-06-01)
+
+- **Bug:** Step 3 showed “Internal server error” on commit — `ownerCache` stored user IDs then reused them as `projectMemberId` (FK violation).
+- **Fix:** Separate `stubUserCache` vs `projectMemberCache`; workspace id from `/workspaces/mine` when store empty; missing upload file → 404; defensive `messages` array in preview API/UI.
+
 ### Known follow-ups (not blocking)
 
 - Multi-sheet Excel importer  

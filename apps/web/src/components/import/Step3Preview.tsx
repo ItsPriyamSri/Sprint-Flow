@@ -45,8 +45,9 @@ function RowValidationStatus({ row }: { row: ImportRow }) {
   const tooltipId = useId();
   const style = STATUS_STYLES[row.status] ?? STATUS_STYLES.SKIPPED;
   const noteStyle = NOTE_STYLES[row.status as keyof typeof NOTE_STYLES] ?? NOTE_STYLES.WARNING;
-  const hasNotes = row.messages.length > 0;
-  const noteLabel = `${row.messages.length} note${row.messages.length > 1 ? 's' : ''}`;
+  const messages = Array.isArray(row.messages) ? row.messages : [];
+  const hasNotes = messages.length > 0;
+  const noteLabel = `${messages.length} note${messages.length > 1 ? 's' : ''}`;
 
   return (
     <div className="flex min-w-[7.5rem] flex-col gap-1.5">
@@ -91,7 +92,7 @@ function RowValidationStatus({ row }: { row: ImportRow }) {
               Validation details
             </p>
             <ul className="space-y-1">
-              {row.messages.map((message, index) => (
+              {messages.map((message, index) => (
                 <li key={`${message.field ?? 'msg'}-${index}`} className="flex gap-1.5">
                   <span className="shrink-0 opacity-60">•</span>
                   <span>{message.message}</span>
@@ -139,6 +140,9 @@ export function Step3Preview({
 
   const hasRows = (stats?.valid ?? 0) + (stats?.warnings ?? 0) > 0;
   const canCommit = hasRows && canCommitProject;
+  const sprintCount = typeof stats?.sprints === 'number' ? stats.sprints : 0;
+  const epicCount = typeof stats?.epics === 'number' ? stats.epics : 0;
+  const ownerCount = typeof stats?.owners === 'number' ? stats.owners : 0;
 
   return (
     <div className="space-y-6">
@@ -177,9 +181,9 @@ export function Step3Preview({
 
       {stats && (
         <div className="flex gap-4 text-sm text-slate-600">
-          <span>🗓 {stats.sprints} sprint{stats.sprints !== 1 ? 's' : ''}</span>
-          <span>🏷 {stats.epics} epic{stats.epics !== 1 ? 's' : ''}</span>
-          <span>👤 {stats.owners} owner{stats.owners !== 1 ? 's' : ''}</span>
+          <span>🗓 {sprintCount} sprint{sprintCount !== 1 ? 's' : ''}</span>
+          <span>🏷 {epicCount} epic{epicCount !== 1 ? 's' : ''}</span>
+          <span>👤 {ownerCount} owner{ownerCount !== 1 ? 's' : ''}</span>
         </div>
       )}
 

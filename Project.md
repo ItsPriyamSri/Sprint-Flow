@@ -10,6 +10,46 @@ You should think as if this system will eventually become a company-wide interna
 
 ---
 
+# IMPLEMENTATION STATUS (as of 2026-06-01)
+
+**Shipped.** The repo implements Phases 0–6. See [PROGRESS.md](PROGRESS.md) and [README.md](README.md) for runbooks and handoff detail.
+
+| Area | Status |
+|------|--------|
+| Auth (JWT + refresh, seeded admin) | Done |
+| Excel import (upload → map → preview → commit → rollback) | Done |
+| CARR workbook (`Scrum for CARR.xlsx`, Master Task List, ~45 tasks) | Done |
+| Flow Kanban (`/board`) — drag-and-drop, filters P0/P1/P2 | Done |
+| **Scrum dashboard** — Overview, per-sprint board, My Work, Team, Backlog | Done |
+| **Projects** — `Project`, `ProjectMember`, `TaskAssignment`, hour planning | Done |
+| Onboarding wizard (project + sprints + epics) | Done (invite-by-email still partial) |
+| Docker production stack | Done |
+| AI features | Not started (see `AI_ROADMAP.md`) |
+
+### Product shape today
+
+- **Primary entry:** `/overview` (project health, sprint capacity, buffer).
+- **Import:** `/import` — binds to **active project**; success CTA → Overview (not only Flow).
+- **Flow:** `/board` — workspace Kanban; all tasks on the default board regardless of `projectId`.
+- **Scrum views** filter by **project** and **project-scoped sprints**; imported tasks must have `projectId` + sprint linked to that project to appear on Overview (import commit enforces this).
+
+### Import pipeline (implemented behavior)
+
+1. Upload → parse **Master Task List** (dynamic header row; decimal IDs via SheetJS `.w`).
+2. Column mapping UI (including Hrs N/I, Total, Status, Epic, Sprint, Owner).
+3. Preview (VALID / WARNING / ERROR / SKIPPED).
+4. Commit in one transaction: resolve `projectId`, adopt/create project sprints, epics, tasks, `TaskAssignment` from hour columns when owner matches a `ProjectMember` (e.g. Nate, Iris, Shared split).
+5. Rollback deletes tasks created by that import only.
+
+**Recent fixes (2026-06-01):** Import no longer mixes user IDs with project-member IDs for assignments (was causing 500 on commit/preview step). Workspace id resolved from API when missing in client storage. Missing upload file returns a clear 404 on re-map.
+
+### Local dev
+
+- API: `http://localhost:3001` — Web: `http://localhost:3002`
+- Login: `admin@sprintflow.local` / `Admin1234!` (after `pnpm db:seed`)
+
+---
+
 # PROJECT OVERVIEW
 
 We need to build an internal task management platform inspired by Trello and Jira.
@@ -183,83 +223,55 @@ without major rewrites.
 
 # WORKSPACE MODEL
 
-The system should support:
+**Implemented model (Phase 6):**
 
+```
 Workspace
-→ Boards
-→ Sprints
-→ Tasks
+├── Project(s)          ← Scrum planning unit (e.g. "CARR Release")
+│   ├── ProjectMember   ← hours/day, role; used for capacity + TaskAssignment
+│   ├── Sprint(s)       ← projectId set; goal, days, release fields
+│   ├── Epic(s)
+│   └── Tasks           ← projectId + sprintId + boardId/columnId
+├── Board(s)            ← Flow Kanban (workspace-scoped)
+│   └── BoardColumn → Task (same Task rows as Scrum views)
+└── Import → ImportRow
+```
 
-A user belongs to a workspace.
+A user belongs to a workspace via `WorkspaceMember`.
 
-A workspace can contain multiple boards.
+**Scrum views** (Overview, My Work, Team, Backlog, sprint board) scope data by **active project**.
 
-Boards contain tasks.
+**Flow board** loads tasks by **boardId** (workspace-wide).
 
-Tasks belong to sprints.
+Legacy workspace-scoped sprints (`projectId = null`) are adopted onto a project during import when names match.
 
 ---
 
 # MVP FEATURES
 
-The MVP must include:
+### Shipped
 
-Authentication
+| Feature | Notes |
+|---------|--------|
+| Authentication | Login, logout, JWT + rotating refresh, change password |
+| Excel import | Full pipeline + rollback; CARR column map |
+| Task CRUD + move | Audited; fractional positions |
+| Flow board | Kanban DnD, column reorder, filters |
+| Task details | Drawer (Flow + Scrum); comments, activity |
+| Scrum dashboard | Overview, sprint board, My Work, Team, Backlog |
+| Projects | Create via onboarding; members, capacity hours |
+| Priorities | P0 / P1 / P2 |
+| Audit logging | Tasks, moves, imports |
 
-* Login
-* Logout
-* JWT
+### Not yet / partial
 
-Excel Import
-
-* Upload workbook
-* Parse workbook
-* Preview import
-* Commit import
-
-Task Management
-
-* Create task
-* Edit task
-* Delete task
-* Move task
-
-Board
-
-* Kanban board
-* Drag and drop
-* Column reordering
-
-Task Details
-
-* Title
-* Description
-* Notes
-* Priority
-* Owner
-* Epic
-* Sprint
-
-Views
-
-* Board View
-* Sprint View
-* Backlog View
-* Owner View
-
-Filtering
-
-* Sprint
-* Owner
-* Epic
-* Priority
-* Status
-
-Audit Logging
-
-* Track task updates
-* Track moves
-* Track imports
+| Feature | Notes |
+|---------|--------|
+| Multi-sheet import | Deferred / single-sheet only |
+| Personal Boards sheet | Not a separate view |
+| Invite-by-email in onboarding | Members without `userId` dropped |
+| In-board Flow toggle on sprint view | Flow is separate route |
+| AI-assisted mapping | Future (`AI_ROADMAP.md`) |
 
 ---
 
@@ -271,26 +283,25 @@ The import process must:
 
 1. Upload workbook
 2. Parse workbook
-3. Detect Master Task List
+3. Detect Master Task List (fuzzy sheet name match, e.g. `📊 Master Task List`)
 4. Detect header row dynamically
 5. Extract rows
-6. Normalize data
+6. Normalize data (status → column key; priority → P0/P1/P2; hours N/I/total)
 7. Preview import
 8. Validate import
-9. Commit import
+9. Commit import **into the active project** (sprints/epics/tasks/assignments)
 
 The parser must:
 
 * Trim whitespace
 * Handle empty values
-* Handle special symbols
-* Preserve task IDs
-* Preserve sprint names
-* Preserve owner names
+* Handle special symbols (checkbox-prefixed statuses)
+* Preserve task IDs as **strings** (e.g. `0.7`, `13.5`)
+* Preserve sprint names, epic names, owner names
+* Never assume fixed row numbers
+* Detect columns by header patterns + user-editable mapping
 
-The parser must never assume fixed row numbers.
-
-The parser must detect columns based on content.
+**Post-import:** Tasks appear on **Overview** and sprint boards when `projectId` and project-scoped `sprintId` are set. Re-import upserts by `workspaceId` + `externalId`. Users should use **View project overview** after import, not only Flow.
 
 ---
 
@@ -693,7 +704,7 @@ The desired end result is:
 
 A manager uploads the existing Excel workbook.
 
-Within a minute they have a fully interactive Scrum board.
+Within a minute they have a fully interactive **project dashboard** (Overview + sprint boards + capacity) and a **Flow** Kanban.
 
 No manual data entry.
 
@@ -701,7 +712,7 @@ No complicated setup.
 
 No migration pain.
 
-Just upload the workbook and start working.
+Just upload the workbook, confirm **Importing into: {project name}**, commit, and open **Overview**.
 
 ---
 

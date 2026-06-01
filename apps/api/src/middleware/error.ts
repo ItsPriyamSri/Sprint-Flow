@@ -33,6 +33,15 @@ export const errorHandler: ErrorRequestHandler = (
       });
       return;
     }
+    if (err.code === 'P2003') {
+      res.status(422).json({
+        error: {
+          code: 'INVALID_REFERENCE',
+          message: 'Import could not link hours to a project member. Ensure owners in the sheet match project members (Nate, Iris, etc.).',
+        },
+      });
+      return;
+    }
   }
 
   console.error('[Unhandled]', err);

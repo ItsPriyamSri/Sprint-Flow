@@ -91,7 +91,16 @@ export async function updateMapping(
     throw new ForbiddenError('Cannot modify a committed or rolled-back import');
   }
 
-  const buffer = await storage.read(imp.storageKey);
+  let buffer: Buffer;
+  try {
+    buffer = await storage.read(imp.storageKey);
+  } catch {
+    throw new AppError(
+      'NOT_FOUND',
+      'Import file is no longer on the server — upload the workbook again',
+      404,
+    );
+  }
   const result = reparse(buffer, imp.filename, columnMap);
 
   const statsJson = serializeStats(result);
@@ -156,13 +165,15 @@ async function resolveOrCreateSprintForImport(
   sprintName: string,
   sprintCache: Map<string, string>,
 ): Promise<string> {
-  const cached = sprintCache.get(sprintName);
+  // Normalize key so "Sprint 1" and "sprint 1" map to the same entry
+  const cacheKey = sprintName.toLowerCase().trim();
+  const cached = sprintCache.get(cacheKey);
   if (cached) return cached;
 
   const existing = await tx.sprint.findFirst({
     where: {
       workspaceId,
-      name: sprintName,
+      name: { equals: sprintName.trim(), mode: 'insensitive' },
       OR: [{ projectId: null }, { projectId }],
     },
     orderBy: { createdAt: 'asc' },
@@ -175,11 +186,12 @@ async function resolveOrCreateSprintForImport(
         data: { projectId },
       });
     }
-    sprintCache.set(sprintName, existing.id);
+    sprintCache.set(cacheKey, existing.id);
     return existing.id;
   }
 
-  const sprintKey = `sprint-${projectId}-${sprintName}`;
+  // Deterministic id prevents duplicate creation on concurrent re-imports
+  const sprintKey = `sprint-${projectId}-${cacheKey}`;
   const sprint = await tx.sprint.upsert({
     where: { id: sprintKey },
     update: { projectId },
@@ -187,13 +199,13 @@ async function resolveOrCreateSprintForImport(
       id: sprintKey,
       workspaceId,
       projectId,
-      name: sprintName,
+      name: sprintName.trim(),
       status: 'PLANNING',
       days: 6,
       position: sprintCache.size * 1000,
     },
   });
-  sprintCache.set(sprintName, sprint.id);
+  sprintCache.set(cacheKey, sprint.id);
   return sprint.id;
 }
 
@@ -232,7 +244,8 @@ export async function commitImport(
   // Caches to avoid repeated lookups within a single commit
   const sprintCache = new Map<string, string>(); // name → id
   const epicCache = new Map<string, string>();
-  const ownerCache = new Map<string, string>();
+  const stubUserCache = new Map<string, string>(); // owner name → user id (stubs only)
+  const projectMemberCache = new Map<string, string>(); // owner name → projectMember id
   const colPositions = new Map<string, number>(); // columnId → next position
 
   let committed = 0;
@@ -286,15 +299,17 @@ export async function commitImport(
           epicId = epicCache.get(norm.epicName) ?? null;
         }
 
-        // Owner: create UNCLAIMED user stub for future claiming (not linked to task directly)
+        // Owner: find-or-create an UNCLAIMED user stub, ensure a WorkspaceMember and
+        // a ProjectMember exist so that TaskAssignment (and thus the name on cards) works.
         if (norm.ownerName) {
-          const cacheKey = norm.ownerName.toLowerCase();
-          if (!ownerCache.has(cacheKey)) {
-            const existing = await tx.user.findFirst({
+          const cacheKey = norm.ownerName.toLowerCase().trim();
+          if (!stubUserCache.has(cacheKey)) {
+            const existingUser = await tx.user.findFirst({
               where: { name: { equals: norm.ownerName, mode: 'insensitive' }, status: { in: ['UNCLAIMED', 'ACTIVE', 'INVITED'] } },
             });
-            if (existing) {
-              ownerCache.set(cacheKey, existing.id);
+            let userId: string;
+            if (existingUser) {
+              userId = existingUser.id;
             } else {
               const stub = await tx.user.create({
                 data: { name: norm.ownerName, status: 'UNCLAIMED' },
@@ -304,7 +319,18 @@ export async function commitImport(
                 update: {},
                 create: { userId: stub.id, workspaceId, role: 'VIEWER' },
               });
-              ownerCache.set(cacheKey, stub.id);
+              userId = stub.id;
+            }
+            stubUserCache.set(cacheKey, userId);
+
+            // Upsert ProjectMember so TaskAssignment FK is satisfiable
+            if (!projectMemberCache.has(cacheKey)) {
+              const pm = await tx.projectMember.upsert({
+                where: { projectId_userId: { projectId, userId } },
+                update: {},
+                create: { projectId, userId, role: 'MEMBER', hoursPerDay: 6 },
+              });
+              projectMemberCache.set(cacheKey, pm.id);
             }
           }
         }
@@ -350,11 +376,12 @@ export async function commitImport(
               data: { workspaceId, ...taskFields },
             });
 
-        // ── TaskAssignment creation (Phase 6) ─────────────────────────────────
-        // When projectId is provided, resolve ownerName → ProjectMember and create
-        // TaskAssignment rows for hoursN and/or hoursI.
-        if (projectId && (norm.hoursN || norm.hoursI || norm.hoursTotal)) {
-          const isShared = norm.ownerName?.toLowerCase().trim() === 'shared';
+        // ── TaskAssignment creation ─────────────────────────────────────────────
+        // Create assignment for every task that has an owner — even with 0 hours —
+        // so the assignee name is visible on cards. ProjectMember records were
+        // already upserted above in the owner-stub block.
+        if (projectId && norm.ownerName) {
+          const isShared = norm.ownerName.toLowerCase().trim() === 'shared';
 
           if (isShared) {
             // "Shared" → split hoursN and hoursI among the first two project members
@@ -368,7 +395,7 @@ export async function commitImport(
             for (let mi = 0; mi < Math.min(projectMembers.length, 2); mi++) {
               const member = projectMembers[mi];
               const hrs = hoursValues[mi] ?? 0;
-              if (member && hrs > 0) {
+              if (member) {
                 await tx.taskAssignment.upsert({
                   where: { taskId_projectMemberId: { taskId: task.id, projectMemberId: member.id } },
                   update: { hours: hrs },
@@ -376,28 +403,17 @@ export async function commitImport(
                 });
               }
             }
-          } else if (norm.ownerName) {
-            // Single owner: find project member by name
-            const ownerKey = norm.ownerName.toLowerCase();
-            if (!ownerCache.has(ownerKey)) {
-              const match = await tx.projectMember.findFirst({
-                where: {
-                  projectId,
-                  user: { name: { equals: norm.ownerName, mode: 'insensitive' } },
-                },
-              });
-              ownerCache.set(ownerKey, match?.id ?? '');
-            }
-            const projectMemberId = ownerCache.get(ownerKey);
+          } else {
+            // Single owner — projectMemberId already in cache from the stub-creation block above
+            const ownerKey = norm.ownerName.toLowerCase().trim();
+            const projectMemberId = projectMemberCache.get(ownerKey);
             if (projectMemberId) {
-              const totalHours = norm.hoursTotal ?? (norm.hoursN ?? 0) + (norm.hoursI ?? 0);
-              if (totalHours > 0) {
-                await tx.taskAssignment.upsert({
-                  where: { taskId_projectMemberId: { taskId: task.id, projectMemberId } },
-                  update: { hours: totalHours },
-                  create: { taskId: task.id, projectMemberId, hours: totalHours },
-                });
-              }
+              const totalHours = norm.hoursTotal ?? ((norm.hoursN ?? 0) + (norm.hoursI ?? 0));
+              await tx.taskAssignment.upsert({
+                where: { taskId_projectMemberId: { taskId: task.id, projectMemberId } },
+                update: { hours: totalHours },
+                create: { taskId: task.id, projectMemberId, hours: totalHours },
+              });
             }
           }
         }

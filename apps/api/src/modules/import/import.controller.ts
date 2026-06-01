@@ -76,7 +76,7 @@ export async function preview(req: Request, res: Response, next: NextFunction) {
         raw: r.raw,
         normalized: r.normalized,
         status: r.status,
-        messages: r.messages,
+        messages: Array.isArray(r.messages) ? r.messages : [],
         createdTaskId: r.createdTaskId,
       })),
     });

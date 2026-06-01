@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useBoardStore } from '@/store/board.store';
+import { useProjectStore } from '@/store/project.store';
 import { getMyWorkspace } from '@/lib/api/workspaces';
 import { listWorkspaceUsers } from '@/lib/api/users';
 
@@ -12,9 +13,13 @@ interface Props {
 }
 
 export function FilterBar({ workspaceId }: Props) {
-  const filters     = useBoardStore((s) => s.filters);
-  const setFilter   = useBoardStore((s) => s.setFilter);
+  const filters      = useBoardStore((s) => s.filters);
+  const setFilter    = useBoardStore((s) => s.setFilter);
   const clearFilters = useBoardStore((s) => s.clearFilters);
+
+  // Use persisted activeProjectId to look up the active project inside the
+  // fresh workspace query — avoids relying on stale activeProject object.
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
 
   const { data: workspace } = useQuery({
     queryKey: ['workspace'],
@@ -28,6 +33,26 @@ export function FilterBar({ workspaceId }: Props) {
     enabled: !!workspaceId,
     staleTime: 60_000,
   });
+
+  // Resolve the active project from workspace data (more reliable than store object after refresh)
+  const activeProject =
+    workspace?.projects.find((p) => p.id === activeProjectId) ??
+    workspace?.projects[0] ??
+    null;
+
+  // Merge project-scoped sprints/epics (post-import) with legacy workspace-scoped ones
+  // de-duplicate by id so legacy and project lists never show duplicates
+  const sprintMap = new Map([
+    ...(workspace?.sprints ?? []).map((s) => [s.id, s] as const),
+    ...(activeProject?.sprints ?? []).map((s) => [s.id, s] as const),
+  ]);
+  const epicMap = new Map([
+    ...(workspace?.epics ?? []).map((e) => [e.id, e] as const),
+    ...(activeProject?.epics ?? []).map((e) => [e.id, e] as const),
+  ]);
+
+  const sprints = [...sprintMap.values()];
+  const epics   = [...epicMap.values()];
 
   const hasActive = Object.values(filters).some(Boolean);
 
@@ -48,7 +73,7 @@ export function FilterBar({ workspaceId }: Props) {
         className={selectCls(!!filters.sprint)}
       >
         <option value="">All sprints</option>
-        {workspace?.sprints.map((s) => (
+        {sprints.map((s) => (
           <option key={s.id} value={s.id}>{s.name}</option>
         ))}
       </select>
@@ -74,7 +99,7 @@ export function FilterBar({ workspaceId }: Props) {
         className={selectCls(!!filters.epic)}
       >
         <option value="">All epics</option>
-        {workspace?.epics.map((e) => (
+        {epics.map((e) => (
           <option key={e.id} value={e.id}>{e.name}</option>
         ))}
       </select>
@@ -104,3 +129,4 @@ export function FilterBar({ workspaceId }: Props) {
     </div>
   );
 }
+

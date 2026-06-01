@@ -23,7 +23,8 @@ const STEPS = [
 
 export function ImportWizard() {
   const queryClient = useQueryClient();
-  const workspaceId = useAuthStore((s) => s.defaultWorkspaceId) ?? '';
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const storedWorkspaceId = useAuthStore((s) => s.defaultWorkspaceId);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const setActiveProject = useProjectStore((s) => s.setActiveProject);
   const [step, setStep] = useState<Step>(1);
@@ -36,9 +37,11 @@ export function ImportWizard() {
   const { data: workspace } = useQuery({
     queryKey: ['workspace'],
     queryFn: getMyWorkspace,
-    enabled: !!workspaceId,
+    enabled: !!accessToken,
     staleTime: 60_000,
   });
+
+  const workspaceId = storedWorkspaceId ?? workspace?.id ?? '';
 
   const targetProject =
     workspace?.projects?.find((p) => p.id === activeProjectId) ??
@@ -50,9 +53,15 @@ export function ImportWizard() {
   const resolveProjectId = (): string | null =>
     activeProjectId ?? workspace?.projects?.[0]?.id ?? null;
 
+  const requireWorkspaceId = (): string => {
+    const id = workspaceId || workspace?.id;
+    if (!id) throw new Error('Workspace is still loading — wait a moment and try again.');
+    return id;
+  };
+
   // Step 1 → upload + parse
   const uploadMutation = useMutation({
-    mutationFn: (f: File) => uploadWorkbook(f, workspaceId),
+    mutationFn: (f: File) => uploadWorkbook(f, requireWorkspaceId()),
     onSuccess: (data) => { setUpload(data); setStep(2); clearError(); },
     onError: (e: Error) => setError(e.message),
   });
@@ -60,8 +69,9 @@ export function ImportWizard() {
   // Step 2 → update mapping + fetch preview
   const mappingMutation = useMutation({
     mutationFn: async (columnMap: Record<string, string>) => {
-      await updateMapping(upload!.importId, workspaceId, columnMap);
-      return getPreview(upload!.importId, workspaceId);
+      const wsId = requireWorkspaceId();
+      await updateMapping(upload!.importId, wsId, columnMap);
+      return getPreview(upload!.importId, wsId);
     },
     onSuccess: (data) => { setPreview(data); setStep(3); clearError(); },
     onError: (e: Error) => setError(e.message),
@@ -74,7 +84,7 @@ export function ImportWizard() {
       if (!projectId) {
         throw new Error('Create or select a project before importing.');
       }
-      return commitImport(upload!.importId, workspaceId, {
+      return commitImport(upload!.importId, requireWorkspaceId(), {
         createSprints: true,
         createEpics: true,
         projectId,
