@@ -16,7 +16,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:status": "prisma migrate status",
-    "seed": "tsx src/seed.ts",
+    "seed": "tsx --env-file=../../.env src/seed.ts",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },

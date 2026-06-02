@@ -1284,6 +1284,11 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
   if (noEpicTasks.length > 0 && !epicIds.includes(null)) {
     epicGroups.push({ epic: null, tasks: noEpicTasks });
   }
+  // New sprint UX: if there are no tasks yet, still render a "No Epic" section
+  // so users can add the first task directly from the sprint board.
+  if (epicGroups.length === 0) {
+    epicGroups.push({ epic: null, tasks: [] });
+  }
 
   const blockedCount = board.tasks.filter((t) => t.blocked).length;
 
@@ -1336,10 +1341,10 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
           />
         ))}
 
-        {epicGroups.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/20">
+        {board.tasks.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
             <p className="text-sm font-medium text-slate-400">No tasks in this sprint yet.</p>
-            <p className="mt-1 text-xs text-slate-300">Add tasks using the "+ Add task" button below each epic.</p>
+            <p className="mt-1 text-xs text-slate-300">Use “Add task” below to create the first one.</p>
           </div>
         )}
 
