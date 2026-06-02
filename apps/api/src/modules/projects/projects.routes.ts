@@ -487,29 +487,18 @@ projectsRouter.patch(
 
 
 // ── My Work endpoint ──────────────────────────────────────────────────────────
-// GET /projects/:projectId/my-work
-// ADMIN/OWNER workspace role → all team members' assignments (grouped by assignee in UI)
-// MEMBER/VIEWER workspace role → own assignments only
+// GET /projects/:projectId/my-work — assignments + dynamic day targets for current user
 projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { projectId } = req.params as { projectId: string };
-    const project = await assertProjectAccess(projectId, req.user!.id);
+    await assertProjectAccess(projectId, req.user!.id);
 
-    // Determine the caller's workspace role to decide the data scope
-    const wsMembership = await prisma.workspaceMember.findUnique({
-      where: { userId_workspaceId: { userId: req.user!.id, workspaceId: project.workspaceId } },
-      select: { role: true },
-    });
-    const isAdmin = wsMembership?.role === 'ADMIN' || wsMembership?.role === 'OWNER';
-
-    // Find the ProjectMember record for this user (may not exist for workspace-only admins)
+    // Find the ProjectMember record for this user
     const projectMember = await prisma.projectMember.findFirst({
       where: { projectId, userId: req.user!.id },
       include: { user: { select: { id: true, name: true, email: true, status: true } } },
     });
-
-    // Non-admin users must be project members
-    if (!projectMember && !isAdmin) throw new ForbiddenError('You are not a member of this project');
+    if (!projectMember) throw new ForbiddenError('You are not a member of this project');
 
     // Active sprint
     const currentSprint = await prisma.sprint.findFirst({
@@ -517,16 +506,10 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       orderBy: { position: 'asc' },
     });
 
-    // Admin: all project task assignments; Member: own assignments only
+    // Tasks assigned to this member
     const assignments = await prisma.taskAssignment.findMany({
-      where: isAdmin
-        ? { projectMember: { projectId } }          // every assignee in this project
-        : { projectMemberId: projectMember!.id },   // this user only
+      where: { projectMemberId: projectMember.id },
       include: {
-        // Top-level projectMember gives us the assignee name for admin grouping
-        projectMember: {
-          select: { id: true, user: { select: { id: true, name: true } } },
-        },
         task: {
           include: {
             sprint:  { select: { id: true, name: true, status: true } },
@@ -584,8 +567,6 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
         updatedAt: t.updatedAt.toISOString(),
         myHours,
         dailyTarget,
-        // Populated in admin view so the frontend can group by assignee
-        assigneeName: isAdmin ? (a.projectMember.user.name ?? null) : undefined,
       };
     }
 
@@ -599,7 +580,7 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
         return pa - pb;
       });
 
-    // Today's focus: top P0 + P1 undone tasks, max 3 (own tasks only in admin mode too)
+    // Today's focus: top P0 + P1 undone tasks, max 3
     const todayFocus = currentSprintTasks.filter((t) => !t.done).slice(0, 3);
 
     const upcomingTasks = assignments
@@ -610,32 +591,8 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       })
       .map(taskToDto);
 
-    // Build the member field for the response header (the logged-in user's own record)
-    let memberRecord: {
-      id: string; userId: string; name: string; email: string | null;
-      role: string; hoursPerDay: number; status: string;
-    };
-    if (projectMember) {
-      memberRecord = memberDto({ ...projectMember, user: projectMember.user });
-    } else {
-      // Admin with no project membership — fetch just enough user info for the header
-      const adminUser = await prisma.user.findUnique({
-        where: { id: req.user!.id },
-        select: { name: true, email: true, status: true },
-      });
-      memberRecord = {
-        id: '',
-        userId: req.user!.id,
-        name: adminUser?.name ?? 'Admin',
-        email: adminUser?.email ?? null,
-        role: 'ADMIN',
-        hoursPerDay: 0,
-        status: adminUser?.status ?? 'ACTIVE',
-      };
-    }
-
     res.json({
-      member: memberRecord,
+      member: memberDto({ ...projectMember, user: projectMember.user }),
       currentSprint: currentSprint
         ? {
             id: currentSprint.id, name: currentSprint.name, goal: currentSprint.goal,
@@ -653,7 +610,6 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       currentSprintTasks,
       upcomingTasks,
       daysRemaining,
-      isAdminView: isAdmin,
     });
   } catch (e) { next(e); }
 });

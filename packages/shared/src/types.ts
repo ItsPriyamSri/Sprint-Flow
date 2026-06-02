@@ -193,8 +193,6 @@ export interface EpicDto {
 export interface MyWorkTaskDto extends SprintTaskDto {
   myHours: number; // this member's hours for this task
   dailyTarget: number; // myHours / daysRemaining
-  /** Admin view only — name of the member this assignment belongs to */
-  assigneeName?: string | null;
 }
 
 export interface MyWorkDto {
@@ -204,8 +202,6 @@ export interface MyWorkDto {
   currentSprintTasks: MyWorkTaskDto[];
   upcomingTasks: MyWorkTaskDto[];
   daysRemaining: number;
-  /** true when an ADMIN/OWNER is viewing all team members' work */
-  isAdminView: boolean;
 }
 
 // ─── Team View DTOs ───────────────────────────────────────────────────────────
