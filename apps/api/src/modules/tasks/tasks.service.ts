@@ -169,6 +169,39 @@ export async function updateTask(
 ) {
   const old = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
 
+  // If `done` is being explicitly toggled AND the caller did not provide an explicit
+  // columnId, find the canonical board column and sync the task's Flow Board position.
+  let syncColumnId: string | undefined;
+  let syncPosition:  number  | undefined;
+
+  if (input.done !== undefined && input.done !== old.done && input.columnId === undefined) {
+    const primaryKey  = input.done ? 'done'        : 'in_progress';
+    const fallbackKey = input.done ? 'done'        : 'todo';
+
+    const col =
+      (await prisma.boardColumn.findFirst({
+        where: { boardId: old.boardId, key: primaryKey },
+        select: { id: true },
+      })) ??
+      (await prisma.boardColumn.findFirst({
+        where: { boardId: old.boardId, key: fallbackKey },
+        select: { id: true },
+      }));
+
+    if (col) {
+      syncColumnId = col.id;
+      // Append at the bottom of the target column
+      const lastInCol = await prisma.task.findFirst({
+        where: { columnId: col.id, id: { not: taskId } },
+        orderBy: { position: 'desc' },
+        select: { position: true },
+      });
+      syncPosition = (lastInCol?.position ?? 0) + 1000;
+    }
+  }
+
+  const resolvedColumnId = syncColumnId ?? input.columnId;
+
   const updated = await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -178,7 +211,8 @@ export async function updateTask(
       ...(input.priority !== undefined    && { priority: input.priority }),
       ...(input.sprintId !== undefined    && { sprintId: input.sprintId }),
       ...(input.epicId !== undefined      && { epicId: input.epicId }),
-      ...(input.columnId !== undefined    && { columnId: input.columnId }),
+      ...(resolvedColumnId !== undefined  && { columnId: resolvedColumnId }),
+      ...(syncPosition !== undefined      && { position: syncPosition }),
       ...(input.externalId !== undefined  && { externalId: input.externalId }),
       ...(input.done !== undefined        && { done: input.done }),
       ...(input.blocked !== undefined     && { blocked: input.blocked }),
@@ -227,9 +261,20 @@ export async function moveTask(
 ) {
   const old = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
 
+  // Look up the target column key so we can sync `done` atomically in the same write.
+  const targetColumn = await prisma.boardColumn.findUnique({
+    where: { id: move.columnId },
+    select: { name: true, key: true },
+  });
+
   const updated = await prisma.task.update({
     where: { id: taskId },
-    data: { columnId: move.columnId, position: move.position },
+    data: {
+      columnId: move.columnId,
+      position: move.position,
+      // Moving into the "done" column marks the task done; any other column clears it.
+      done: targetColumn?.key === 'done',
+    },
     include: { column: { select: { name: true } } },
   });
 
