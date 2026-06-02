@@ -37,6 +37,12 @@ export function CreateTaskForm({ columnId, boardId, workspaceId }: Props) {
         ),
       }));
       queryClient.setQueryData(['task', newTask.id, workspaceId], newTask);
+      queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      queryClient.invalidateQueries({ queryKey: ['workspace'] });
       setTitle('');
       setOpen(false);
       openTask(newTask.id);

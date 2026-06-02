@@ -202,6 +202,12 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
     onSuccess: () => {
       setSaved(true);
       void queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+      void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace'] });
       onSaved();
       setTimeout(onClose, 550);
     },

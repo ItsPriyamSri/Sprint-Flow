@@ -91,6 +91,12 @@ export function Board({ boardId }: Props) {
         moveTaskInBoard(old, taskId, columnId, position),
       );
       queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      queryClient.invalidateQueries({ queryKey: ['workspace'] });
     },
     onError: () => {
       queryClient.invalidateQueries({ queryKey: ['board', boardId] });

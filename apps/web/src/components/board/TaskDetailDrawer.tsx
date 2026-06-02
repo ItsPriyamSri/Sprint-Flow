@@ -263,6 +263,12 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
       queryClient.setQueryData(['task', updated.id, wsId], updated);
       syncTaskInBoardCache(queryClient, boardId, updated);
       queryClient.invalidateQueries({ queryKey: ['task-activity', updated.id, wsId] });
+      queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      queryClient.invalidateQueries({ queryKey: ['workspace'] });
       window.setTimeout(() => closeTask(), 550);
     },
     onError: (err: Error) => {
@@ -284,6 +290,12 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
           tasks: col.tasks.filter((t) => t.id !== activeTaskId),
         })),
       }));
+      queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      queryClient.invalidateQueries({ queryKey: ['workspace'] });
       closeTask();
     },
   });

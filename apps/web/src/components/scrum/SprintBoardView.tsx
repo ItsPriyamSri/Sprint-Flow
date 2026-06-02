@@ -66,6 +66,11 @@ function OwnerChips({
       upsertAssignment(taskId, workspaceId, memberId, hours),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace'] });
       onRefresh();
       setActiveChipId(null);
       setShowAdd(false);
@@ -76,6 +81,11 @@ function OwnerChips({
     mutationFn: (memberId: string) => removeAssignment(taskId, workspaceId, memberId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace'] });
       onRefresh();
       setActiveChipId(null);
     },
@@ -949,6 +959,11 @@ function BlockedToggle({
       updateTask(taskId, workspaceId, patch),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace'] });
       onRefresh();
       setIsOpen(false);
     },
@@ -1245,6 +1260,11 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
       updateTask(taskId, workspaceId, { done }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sprint-board', board.sprint.id] });
+      void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace'] });
       onRefresh();
     },
   });
