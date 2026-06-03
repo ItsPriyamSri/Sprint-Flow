@@ -17,6 +17,7 @@
 | **API** | `GET /projects/:projectId/my-work` — checks `req.user.role === 'ADMIN'`; if admin, fetches all project members' `TaskAssignment`s and returns per-member `todayFocus`, `currentSprintTasks`, `upcomingTasks` grouped in `allMembersWork`. Non-admin path unchanged. |
 | **My Work page** | Admin sees **"Team Work"** view: one collapsible `MemberWorkSection` card per project member (avatar, name, role, progress ring, tasks). Non-admin sees their own tasks as before. Header label switches between "Admin View / Team Work" and "My Dashboard / My Work". Progress ring shows team-wide aggregate for admin. |
 | **Placeholder emails** | Role check uses `req.user.role` (JWT `GlobalRole`). Real email → role mapping to be wired in when employee emails are confirmed. Mock admin login (`admin@sprintflow.local`) shows all members' tasks today. |
+| **.gitignore** | Rewrote to cover node_modules, build outputs, `.env*`, secrets (`.pem`/`.key`), Prisma generated client, uploads, logs, OS/editor artifacts, Docker overrides, and all `*.md` except `README.md`. |
 
 ### Verification (2026-06-03)
 
@@ -200,8 +201,8 @@ sprintflow/
 │  └─ ui/                    Button, Badge, Spinner (shared Tailwind components)
 ├─ docker-compose.yml        Full stack (postgres + api + web)
 ├─ docker-compose.dev.yml    Dev (postgres only)
-├─ README.md                 Quick-start guide
-└─ PROGRESS.md               This file
+└─ README.md                 Quick-start guide
+   (PROGRESS.md / AI_ROADMAP.md — local only, excluded from git via .gitignore)
 ```
 
 ---
@@ -246,10 +247,6 @@ sprintflow/
 | POST | `/api/v1/imports/:id/rollback` | member | Delete tasks from this import |
 | GET | `/api/v1/activity` | member | Audit feed (cursor-paginated) |
 | GET | `/api/v1/projects/:id/my-work` | member | Personal work queue; `isAdmin` + `allMembersWork[]` when `User.role === ADMIN` |
-| GET | `/api/v1/projects/:id/epics` | member | Epics with implementing tasks |
-| POST/PATCH/DELETE | `/api/v1/projects/:id/epics/...` | member | Epic CRUD |
-| DELETE | `/api/v1/projects/:id` | member | Delete project (cascade) |
-| DELETE | `/api/v1/sprints/:id` | member | Delete sprint (409 if tasks exist) |
 
 ---
 

@@ -1,38 +1,77 @@
-# dependencies
+# ── dependencies ──────────────────────────────────────────────────────────────
 node_modules/
 .pnpm-store/
+.yarn/
 
-# builds
+# ── build outputs ─────────────────────────────────────────────────────────────
 dist/
-.next/
+build/
 out/
+.next/
 *.tsbuildinfo
+*.js.map
 
-# turbo
+# ── turbo ─────────────────────────────────────────────────────────────────────
 .turbo/
 
-# env
+# ── environment & secrets ─────────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
+.env.production
+*.pem
+*.key
+*.p12
+*.pfx
 
-# prisma generated client
+# ── prisma generated client ───────────────────────────────────────────────────
 packages/db/generated/
 
-# local file storage (uploaded workbooks)
+# ── local file storage ────────────────────────────────────────────────────────
 storage/
 uploads/
 
-# logs
+# ── logs ──────────────────────────────────────────────────────────────────────
 *.log
+logs/
 npm-debug.log*
 pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# os / editor
+# ── test & coverage ───────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ── os artifacts ──────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── editor & IDE ──────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
 
-# test
-coverage/
+# ── temp & cache ──────────────────────────────────────────────────────────────
+.cache/
+.parcel-cache/
+tmp/
+temp/
+*.tmp
+
+# ── docker ────────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── markdown (all except README) ──────────────────────────────────────────────
+*.md
+!README.md

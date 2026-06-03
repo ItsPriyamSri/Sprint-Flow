@@ -77,6 +77,7 @@ Ensure `CORS_ORIGIN` in `.env` matches the web port (default `http://localhost:3
 5. Map columns → preview (confirm **Importing into: &lt;project&gt;**)
 6. Commit → **View project overview** — sprint health, capacity, and task counts update
 7. Open sprints from the sidebar for the epic-grouped sprint board; use **Flow** (`/board`) for Kanban drag-and-drop
+8. **My Work** — admin (`User.role = ADMIN`) sees all team members' tasks grouped by person under "Team Work"; regular members see only their own assignments
 
 **Re-import:** Committing the same workbook again upserts tasks by `externalId` and re-links sprints/epics to the active project. Use this after upgrades if older imports only appeared on Flow.
 
@@ -204,9 +205,9 @@ docker/
   docker-entrypoint.sh    Runs migrations then starts server
 docker-compose.yml        Full stack (prod)
 docker-compose.dev.yml    Dev (Postgres only)
-PROGRESS.md               Build history and next steps
-AI_ROADMAP.md             Future AI integration plan
 ```
+
+> `PROGRESS.md` and `AI_ROADMAP.md` are excluded from git (see `.gitignore`) and exist only in the local working tree for reference.
 
 ---
 
@@ -263,8 +264,9 @@ Browser (Next.js)  →  Express API (/api/v1/*)  →  PostgreSQL (Prisma)
 ```
 
 - JWT access tokens (15 min) + rotating refresh tokens (7 days, httpOnly cookie)
-- Role-based access: Global (ADMIN/MEMBER) + per-Workspace (OWNER/ADMIN/MEMBER/VIEWER)
+- Role-based access: Global (`ADMIN` / `MEMBER`) + per-Workspace (`OWNER` / `ADMIN` / `MEMBER` / `VIEWER`)
+- **My Work** is role-aware: `ADMIN` users receive `allMembersWork[]` (all team members' sprint tasks grouped by person); regular members receive only their own `TaskAssignment` rows
 - All task mutations recorded in `ActivityLog` (audit trail)
 - Fractional float positions for O(1) card reorder without renumbering
 
-See `PROGRESS.md` for the full build history and `AI_ROADMAP.md` for the future AI integration plan.
+`PROGRESS.md` (local-only, gitignored) contains the full build history and phase-by-phase change log.
