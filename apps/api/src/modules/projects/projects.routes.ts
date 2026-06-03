@@ -669,22 +669,24 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       orderBy: { position: 'asc' },
     });
 
-    // Tasks assigned to this member
-    const assignments = await prisma.taskAssignment.findMany({
-      where: { projectMemberId: projectMember.id },
-      include: {
-        task: {
-          include: {
-            sprint:  { select: { id: true, name: true, status: true } },
-            epic:    { select: { id: true, name: true, color: true, projectId: true } },
-            assignments: {
-              include: {
-                projectMember: { select: { id: true, user: { select: { id: true, name: true } } } },
-              },
+    const taskAssignmentInclude = {
+      task: {
+        include: {
+          sprint:  { select: { id: true, name: true, status: true } },
+          epic:    { select: { id: true, name: true, color: true, projectId: true } },
+          assignments: {
+            include: {
+              projectMember: { select: { id: true, user: { select: { id: true, name: true } } } },
             },
           },
         },
       },
+    } as const;
+
+    // Tasks assigned to this member
+    const assignments = await prisma.taskAssignment.findMany({
+      where: { projectMemberId: projectMember.id },
+      include: taskAssignmentInclude,
     });
 
     // Compute days remaining in current sprint
@@ -754,6 +756,61 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       })
       .map(taskToDto);
 
+    const isAdmin = req.user!.role === 'ADMIN';
+
+    // Admin sees all members' work grouped by person
+    let allMembersWork: {
+      member: ReturnType<typeof memberDto>;
+      todayFocus: ReturnType<typeof taskToDto>[];
+      currentSprintTasks: ReturnType<typeof taskToDto>[];
+      upcomingTasks: ReturnType<typeof taskToDto>[];
+    }[] | undefined;
+
+    if (isAdmin) {
+      const allProjectMembers = await prisma.projectMember.findMany({
+        where: { projectId },
+        include: { user: { select: { id: true, name: true, email: true, status: true } } },
+      });
+
+      allMembersWork = await Promise.all(
+        allProjectMembers.map(async (m) => {
+          const memberAssignments = await prisma.taskAssignment.findMany({
+            where: { projectMemberId: m.id },
+            include: taskAssignmentInclude,
+          });
+
+          const memberCurrentSprintTasks = memberAssignments
+            .filter((a) => a.task.sprintId === currentSprint?.id && !a.task.deferred)
+            .map(taskToDto)
+            .sort((a, b) => {
+              const pOrder = { P0: 0, P1: 1, P2: 2 };
+              const pa = pOrder[a.priority as 'P0' | 'P1' | 'P2'] ?? 9;
+              const pb = pOrder[b.priority as 'P0' | 'P1' | 'P2'] ?? 9;
+              return pa - pb;
+            });
+
+          const memberTodayFocus = memberCurrentSprintTasks
+            .filter((t) => !t.done && !t.blocked)
+            .slice(0, 3);
+
+          const memberUpcomingTasks = memberAssignments
+            .filter((a) => {
+              if (!a.task.sprintId || a.task.sprintId === currentSprint?.id) return false;
+              const s = a.task.sprint;
+              return s && s.status === 'PLANNING';
+            })
+            .map(taskToDto);
+
+          return {
+            member: memberDto(m),
+            todayFocus: memberTodayFocus,
+            currentSprintTasks: memberCurrentSprintTasks,
+            upcomingTasks: memberUpcomingTasks,
+          };
+        })
+      );
+    }
+
     res.json({
       member: memberDto({ ...projectMember, user: projectMember.user }),
       currentSprint: currentSprint
@@ -773,6 +830,8 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       currentSprintTasks,
       upcomingTasks,
       daysRemaining,
+      isAdmin,
+      allMembersWork,
     });
   } catch (e) { next(e); }
 });

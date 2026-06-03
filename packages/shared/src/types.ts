@@ -223,6 +223,13 @@ export interface MyWorkTaskDto extends SprintTaskDto {
   dailyTarget: number; // myHours / daysRemaining
 }
 
+export interface MemberWorkSummaryDto {
+  member: ProjectMemberDto;
+  todayFocus: MyWorkTaskDto[];
+  currentSprintTasks: MyWorkTaskDto[];
+  upcomingTasks: MyWorkTaskDto[];
+}
+
 export interface MyWorkDto {
   member: ProjectMemberDto;
   currentSprint: SprintDto | null;
@@ -230,6 +237,8 @@ export interface MyWorkDto {
   currentSprintTasks: MyWorkTaskDto[];
   upcomingTasks: MyWorkTaskDto[];
   daysRemaining: number;
+  isAdmin: boolean;
+  allMembersWork?: MemberWorkSummaryDto[]; // only present for admin users
 }
 
 // ─── Team View DTOs ───────────────────────────────────────────────────────────

@@ -1,9 +1,35 @@
 # SprintFlow — Build Progress & Handoff
 
 **Last updated:** 2026-06-03  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)**  
-**Status:** Full Scrum platform through Phase 10 — dedicated **Epics** page (epics + implementing tasks), epic create/edit/delete API, cascade project delete with type-`CONFIRM` guard, sprint delete, block-task popover fix, shared confirm/delete helpers. See AI_ROADMAP.md for AI work.  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)**  
+**Status:** Full Scrum platform through Phase 11 — My Work page now shows all team members' tasks when logged in as admin, and personal + shared tasks only for regular members. See AI_ROADMAP.md for AI work.  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+---
+
+## Phase 11 — My Work role-based view (2026-06-03)
+
+### What was built
+
+| Area | Detail |
+|---|---|
+| **Shared types** | Added `MemberWorkSummaryDto` (member + task lists). Extended `MyWorkDto` with `isAdmin: boolean` and `allMembersWork?: MemberWorkSummaryDto[]`. |
+| **API** | `GET /projects/:projectId/my-work` — checks `req.user.role === 'ADMIN'`; if admin, fetches all project members' `TaskAssignment`s and returns per-member `todayFocus`, `currentSprintTasks`, `upcomingTasks` grouped in `allMembersWork`. Non-admin path unchanged. |
+| **My Work page** | Admin sees **"Team Work"** view: one collapsible `MemberWorkSection` card per project member (avatar, name, role, progress ring, tasks). Non-admin sees their own tasks as before. Header label switches between "Admin View / Team Work" and "My Dashboard / My Work". Progress ring shows team-wide aggregate for admin. |
+| **Placeholder emails** | Role check uses `req.user.role` (JWT `GlobalRole`). Real email → role mapping to be wired in when employee emails are confirmed. Mock admin login (`admin@sprintflow.local`) shows all members' tasks today. |
+
+### Verification (2026-06-03)
+
+- `pnpm --filter @sprintflow/api typecheck` — pass  
+- `pnpm --filter @sprintflow/web typecheck` — pass  
+- Log in as `admin@sprintflow.local` → My Work → **Team Work** heading, collapsible card per project member (Iris, Nate, Alex, etc.) with that member's assigned tasks.  
+- Log in as a non-admin member (e.g. seeded Iris/Nate) → My Work → **My Work** heading, only tasks with a `TaskAssignment` for that user (includes multi-assignee / "shared" tasks where they have a row).  
+
+### Known follow-ups (not blocking)
+
+- Wire **employee email allowlist** (e.g. Ishika, Naazish) when addresses are confirmed — today admin detection is `User.role === 'ADMIN'` on JWT (mock admin: `admin@sprintflow.local`).  
+- Optional env-based admin emails (`MY_WORK_ADMIN_EMAILS`) for admins who are not `GlobalRole.ADMIN`.  
+- Admin view: open task drawer from a team member's card.  
 
 ---
 
@@ -45,7 +71,7 @@
 |---|---|
 | **Schema** | `Project`, `ProjectMember`, `TaskAssignment`; sprint `goal`/`days`/release fields; `Task.deferred` / `deferredReason`; priority `P0\|P1\|P2` |
 | **API** | `GET/POST /projects`, overview, my-work, team, backlog; `GET /sprints/:id/board`; workspace `mine` hydrates projects with sprints/epics |
-| **Web shell** | `(app)` layout + sidebar; routes: `/overview`, `/sprints/[id]`, `/my-work`, `/team`, `/backlog`, `/onboarding`, `/import`, `/board` (Flow) |
+| **Web shell** | `(app)` layout + sidebar; routes: `/dashboard`, `/overview`, `/epics`, `/sprints/[id]`, `/my-work`, `/team`, `/backlog`, `/activity`, `/onboarding`, `/import`, `/board` (Flow) |
 | **Scrum UI** | `ProjectOverview`, `SprintBoardView`, `ScrumTaskDrawer`, `InlineAddTask` |
 | **Import → dashboard** | `commitImport` requires/resolves `projectId`, adopts workspace sprints by name, post-commit reconciliation; Overview queries by `sprintId ∈ project.sprints`; wizard invalidates cache + links to `/overview` |
 | **Security / quality** | `assertWorkspaceMember` on tasks/sprints/imports/activity; assignment validates project member; project role gating; password change revokes refresh tokens; removed duplicate `app/board` and `app/import` routes |
@@ -155,7 +181,7 @@ sprintflow/
 │  │        └─ activity/      feed with cursor pagination
 │  └─ web/                   Next.js App Router (port 3000)
 │     └─ src/
-│        ├─ app/             layout, page (redirect), login/, board/, import/
+│        ├─ app/             layout, login/, dashboard/, overview/, epics/, backlog/, sprints/[id]/, …
 │        ├─ components/
 │        │  ├─ auth/          LoginForm
 │        │  ├─ board/         Board · BoardColumn · TaskCard · TaskDetailDrawer ·
@@ -207,12 +233,23 @@ sprintflow/
 | GET | `/api/v1/sprints` | member | List sprints |
 | POST | `/api/v1/sprints` | member | Create sprint |
 | PATCH | `/api/v1/sprints/:id` | member | Update sprint |
+| DELETE | `/api/v1/sprints/:id` | member | Delete sprint (409 if tasks assigned) |
+| GET | `/api/v1/projects/:id/epics` | member | Epics with tasks + unassigned bucket |
+| POST | `/api/v1/projects/:id/epics` | member | Create epic |
+| PATCH | `/api/v1/projects/:id/epics/:epicId` | member | Update epic name/color |
+| DELETE | `/api/v1/projects/:id/epics/:epicId` | member | Delete epic (409 if tasks assigned) |
+| DELETE | `/api/v1/projects/:id` | member | Delete project + cascade (tasks, sprints, epics) |
 | POST | `/api/v1/imports` | member | Upload + parse workbook (multipart) |
 | GET | `/api/v1/imports/:id/preview` | member | Preview rows + stats |
 | PATCH | `/api/v1/imports/:id/mapping` | member | Override column mapping + re-validate |
 | POST | `/api/v1/imports/:id/commit` | member | Transactional insert all tasks |
 | POST | `/api/v1/imports/:id/rollback` | member | Delete tasks from this import |
 | GET | `/api/v1/activity` | member | Audit feed (cursor-paginated) |
+| GET | `/api/v1/projects/:id/my-work` | member | Personal work queue; `isAdmin` + `allMembersWork[]` when `User.role === ADMIN` |
+| GET | `/api/v1/projects/:id/epics` | member | Epics with implementing tasks |
+| POST/PATCH/DELETE | `/api/v1/projects/:id/epics/...` | member | Epic CRUD |
+| DELETE | `/api/v1/projects/:id` | member | Delete project (cascade) |
+| DELETE | `/api/v1/sprints/:id` | member | Delete sprint (409 if tasks exist) |
 
 ---
 
@@ -389,9 +426,15 @@ This is the final MVP phase. Estimated scope: ~1 day.
 | `apps/web/src/lib/api/client.ts` | `apiFetch` — auto-refresh on 401, handles auth errors |
 | `apps/web/src/store/auth.store.ts` | Zustand auth state, persisted to localStorage |
 | `apps/web/src/store/board.store.ts` | `activeView`, `filters`, `activeTaskId` — board-level UI state |
-| `apps/web/src/components/scrum/SprintBoardView.tsx` | Sprint board — inline edits, blocked toggle, add/delete tasks, owner chips |
+| `apps/web/src/components/scrum/SprintBoardView.tsx` | Sprint board — inline edits, blocked toggle (portal popover), add/delete tasks, delete sprint |
+| `apps/web/src/components/scrum/EpicFormModal.tsx` | Create/edit/delete epic modal + `invalidateEpicQueries` |
+| `apps/web/src/app/(app)/epics/page.tsx` | Epics hub — all epics with implementing tasks |
+| `apps/web/src/lib/deleteActions.ts` | `confirmDeleteSprint` / `confirmDeleteProject` (typed CONFIRM for projects) |
+| `apps/web/src/components/ui/ConfirmDialog.tsx` | App-wide confirm; optional `requireTypedConfirm` |
 | `apps/web/src/components/scrum/InlineAddTask.tsx` | Inline task creation on sprint board (title, priority, owner, hours) |
 | `apps/web/src/app/(app)/backlog/page.tsx` | Backlog table with search, filters, analytics summary cards |
+| `apps/web/src/app/(app)/my-work/page.tsx` | Personal queue or admin **Team Work** (`MemberWorkSection` per member) |
+| `packages/shared/src/types.ts` | `MyWorkDto`, `MemberWorkSummaryDto`, `ProjectEpicsViewDto`, etc. |
 
 ---
 
@@ -449,13 +492,14 @@ curl -I http://localhost:3000              # → HTTP 200
 
 ## MVP + Scrum platform status
 
-Phases 0–9 shipped. Core promise:
+Phases 0–11 shipped. Core promise:
 
 > Upload the Excel workbook you already use. Within a minute you have a project Overview, sprint boards, capacity views, and a Flow Kanban — no manual re-entry.
 
 **What's been built:**
 - Excel → **project dashboard** + Flow board (import binds to active project)
-- Scrum: Overview, per-sprint board, My Work, Team, Backlog (search/filter + analytics), onboarding wizard
+- Scrum: Overview, **Epics** page (epics + tasks), per-sprint board, **My Work** (admin = all members' tasks; members = own assignments only), Team, Backlog (search/filter + analytics), onboarding wizard
+- Epic CRUD + cascade project delete (type `CONFIRM`) + sprint delete when empty
 - Sprint board: inline add task (`InlineAddTask`), per-row delete, empty-sprint UX for UI-created sprints
 - Flow: Kanban DnD, filters (P0/P1/P2), task drawer; cross-view React Query invalidation on task moves
 - Blocked tasks, comment edit/delete (own), workspace Activity timeline, executive Project Dashboard
@@ -524,7 +568,7 @@ The original architecture plan: `C:\Users\surya\.claude\plans\claude-code-master
 
 ### Known follow-ups (not blocking)
 
-- My Work requires `TaskAssignment` rows (owner must match `ProjectMember`)
+- My Work (non-admin) requires `TaskAssignment` rows (owner must match `ProjectMember`)
 - Onboarding “add member” needs invite-by-email or workspace member picker only
 - Flow toggle embedded in sprint board (Flow is a separate route today)
 - No automated E2E tests for sprint add/delete or backlog filters
@@ -575,16 +619,17 @@ This script provides a step-by-step narrative to showcase the entire end-to-end 
 ---
 
 ### 🎭 Scene 4: Personal Workflows & The Backlog
-* **Speaker Script:** "Every engineer gets a personal, high-focus dashboard called My Work, and product managers can manage deferred items in the Backlog."
+* **Speaker Script:** "Every engineer gets a personal, high-focus dashboard called My Work. Admins see the whole team's assignments in one place; each person only sees their own work (including tasks shared with other assignees)."
 * **Action:**
   1. Navigate to the **My Work** page in the sidebar.
-  2. Point out that your assigned tasks are beautifully organized by priority: P0, P1, and Nice-to-have.
-  3. Point out the **surfaced Blocked Tasks section** right above the P2 items, highlighted with red styling. The blocker reason is displayed inside the card so you know exactly why you are blocked.
-  4. Navigate to the **Backlog** page.
-  5. Point out the summary analytics cards (total hours, blocked, deferred) and the search/filter bar (by title, priority, epic).
-  6. Show the table of tasks with no sprint assigned or marked deferred.
-  7. Show the **Blocked column** and the warning border on blocked backlog rows with their block reasons.
-  * **Result:** Complete team transparency. Blocker reasons are front-and-center so nothing falls through the cracks.
+  2. **As admin** (`admin@sprintflow.local`): show **Team Work** — one collapsible section per team member with their P0/P1/P2/blocked groupings and per-member progress.
+  3. **As a team member** (or describe for demo): show **My Work** — only that user's assigned tasks, organized by priority, with **Blocked Tasks** surfaced above P2.
+  4. Point out task cards list all assignees on multi-owner tasks (shared work visible on the card).
+  5. Navigate to the **Backlog** page.
+  6. Point out the summary analytics cards (total hours, blocked, deferred) and the search/filter bar (by title, priority, epic).
+  7. Show the table of tasks with no sprint assigned or marked deferred.
+  8. Show the **Blocked column** and the warning border on blocked backlog rows with their block reasons.
+  * **Result:** Complete team transparency. Admins get a team-wide My Work view; individuals stay focused on their own queue. Blocker reasons are front-and-center so nothing falls through the cracks.
 
 ---
 
@@ -599,5 +644,7 @@ This script provides a step-by-step narrative to showcase the entire end-to-end 
      - **Summary Cards**: color-coded widgets showcasing project status counts, with an active animated pulse on the Blocked count.
      - **Sprint Health**: progress lines displaying completion rates per sprint, highlighting the active sprint.
      - **Workload Balance**: table demonstrating hours committed vs capacity per team member, highlighting overloaded members in a thick crimson warning.
-     - **Epic Completion**: epic-grouped analytics with progress meters rendered in the epic's database color.
+     - **Epic Completion**: epic-grouped analytics with progress meters rendered in the epic's database color; **Manage epics** links to the dedicated Epics page.
+  6. Navigate to **Epics** in the sidebar.
+  7. Show each epic with its implementing tasks (priority, sprint, hours). **New Epic** / **Edit epic** for rename and color. Note project delete (project menu → type `CONFIRM`) and sprint delete when the sprint has no tasks.
 * **Concluding Script:** "From an offline Excel workbook to a live, beautiful, collaborative Scrum ecosystem in seconds. That's SprintFlow."

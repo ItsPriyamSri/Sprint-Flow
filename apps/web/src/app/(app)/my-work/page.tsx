@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useProjectStore } from '@/store/project.store';
 import { getMyWork } from '@/lib/api/projects';
-import type { MyWorkDto, MyWorkTaskDto } from '@sprintflow/shared';
+import type { MyWorkDto, MyWorkTaskDto, MemberWorkSummaryDto } from '@sprintflow/shared';
 
 const PRIORITY_COLORS: Record<string, string> = {
   P0: 'bg-red-50 text-red-700 border-red-200/60',
@@ -73,15 +73,22 @@ function TaskCard({ task }: { task: MyWorkTaskDto }) {
   );
 }
 
-function MyWorkContent({ data }: { data: MyWorkDto }) {
-  const pendingFocus = data.todayFocus.filter((t) => !t.done && !t.blocked);
-  const p0Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P0' && !t.done && !t.blocked);
-  const p1Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P1' && !t.done && !t.blocked);
-  const p2Tasks = data.currentSprintTasks.filter((t) => t.priority === 'P2' && !t.done && !t.blocked);
-  const blockedTasks = data.currentSprintTasks.filter((t) => t.blocked && !t.done);
-  const doneTasks = data.currentSprintTasks.filter((t) => t.done);
+function TaskSections({
+  currentSprintTasks,
+  todayFocus,
+  upcomingTasks,
+}: {
+  currentSprintTasks: MyWorkTaskDto[];
+  todayFocus: MyWorkTaskDto[];
+  upcomingTasks: MyWorkTaskDto[];
+}) {
+  const pendingFocus = todayFocus.filter((t) => !t.done && !t.blocked);
+  const p0Tasks = currentSprintTasks.filter((t) => t.priority === 'P0' && !t.done && !t.blocked);
+  const p1Tasks = currentSprintTasks.filter((t) => t.priority === 'P1' && !t.done && !t.blocked);
+  const p2Tasks = currentSprintTasks.filter((t) => t.priority === 'P2' && !t.done && !t.blocked);
+  const blockedTasks = currentSprintTasks.filter((t) => t.blocked && !t.done);
+  const doneTasks = currentSprintTasks.filter((t) => t.done);
 
-  // Sort blocked tasks in priority order: P0, then P1, then P2/others
   const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2 };
   blockedTasks.sort(
     (a, b) =>
@@ -89,22 +96,176 @@ function MyWorkContent({ data }: { data: MyWorkDto }) {
       (PRIORITY_ORDER[b.priority ?? 'P2'] ?? 2)
   );
 
+  if (currentSprintTasks.length === 0 && upcomingTasks.length === 0) {
+    return (
+      <p className="text-xs text-slate-400 italic py-2">No tasks assigned this sprint.</p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {pendingFocus.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider">
+            <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-[10px] shadow-sm">⚡</span>
+            Today's Focus
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {pendingFocus.map((t) => <TaskCard key={t.id} task={t} />)}
+          </div>
+        </section>
+      )}
+
+      {blockedTasks.length > 0 && (
+        <section className="rounded-xl border border-rose-200/60 bg-rose-50/10 p-4 space-y-3">
+          <h3 className="flex items-center gap-2 text-xs font-bold text-rose-700 uppercase tracking-wider">
+            <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-rose-500 text-white text-[10px] shadow-sm">🚫</span>
+            Blocked ({blockedTasks.length})
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {blockedTasks.map((t) => <TaskCard key={t.id} task={t} />)}
+          </div>
+        </section>
+      )}
+
+      {p0Tasks.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider">
+            <span className="rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-black text-red-600">P0</span>
+            Must Ship
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {p0Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
+          </div>
+        </section>
+      )}
+
+      {p1Tasks.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider">
+            <span className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-600">P1</span>
+            Should Ship
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {p1Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
+          </div>
+        </section>
+      )}
+
+      {p2Tasks.length > 0 && (
+        <section className="bg-white rounded-xl border border-slate-200/80 p-4">
+          <details className="group/details">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold text-slate-600 uppercase tracking-wider select-none">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-black text-slate-500">P2</span>
+                Nice-to-have ({p2Tasks.length})
+              </div>
+              <svg className="h-3.5 w-3.5 text-slate-400 group-open/details:rotate-180 transition-transform duration-250" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in">
+              {p2Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
+            </div>
+          </details>
+        </section>
+      )}
+
+      {upcomingTasks.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Upcoming</h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 opacity-60">
+            {upcomingTasks.slice(0, 6).map((t) => <TaskCard key={t.id} task={t} />)}
+          </div>
+        </section>
+      )}
+
+      {doneTasks.length > 0 && (
+        <section className="bg-white rounded-xl border border-slate-200/80 p-4">
+          <details className="group/details">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider select-none">
+              <span>Completed ({doneTasks.length})</span>
+              <svg className="h-3.5 w-3.5 text-slate-400 group-open/details:rotate-180 transition-transform duration-250" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 opacity-60 animate-fade-in">
+              {doneTasks.map((t) => <TaskCard key={t.id} task={t} />)}
+            </div>
+          </details>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function MemberWorkSection({ memberWork }: { memberWork: MemberWorkSummaryDto }) {
+  const total = memberWork.currentSprintTasks.length;
+  const done = memberWork.currentSprintTasks.filter((t) => t.done).length;
+  const rate = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  return (
+    <section className="rounded-2xl border border-slate-200/70 bg-white shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 text-sm font-extrabold">
+            {memberWork.member.name.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-800">{memberWork.member.name}</p>
+            <p className="text-[10px] text-slate-400 font-medium capitalize">{memberWork.member.role.toLowerCase()}</p>
+          </div>
+        </div>
+        {total > 0 && (
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="font-semibold text-slate-700">{done}/{total}</span>
+            <span className="text-slate-300">·</span>
+            <span className="rounded-full bg-indigo-50 border border-indigo-100/50 px-2 py-0.5 font-bold text-indigo-600 text-[10px]">{rate}%</span>
+          </div>
+        )}
+      </div>
+      <div className="px-6 py-5">
+        <TaskSections
+          currentSprintTasks={memberWork.currentSprintTasks}
+          todayFocus={memberWork.todayFocus}
+          upcomingTasks={memberWork.upcomingTasks}
+        />
+      </div>
+    </section>
+  );
+}
+
+function MyWorkContent({ data }: { data: MyWorkDto }) {
   const totalMyTasks = data.currentSprintTasks.length;
-  const completedMyTasks = doneTasks.length;
+  const completedMyTasks = data.currentSprintTasks.filter((t) => t.done).length;
   const completionRate = totalMyTasks > 0 ? Math.round((completedMyTasks / totalMyTasks) * 100) : 0;
+
+  const isAdmin = data.isAdmin;
+
+  // For admin: compute aggregate totals across all members
+  const allMembersWork = data.allMembersWork ?? [];
+  const adminTotalTasks = isAdmin
+    ? allMembersWork.reduce((sum, m) => sum + m.currentSprintTasks.length, 0)
+    : totalMyTasks;
+  const adminDoneTasks = isAdmin
+    ? allMembersWork.reduce((sum, m) => sum + m.currentSprintTasks.filter((t) => t.done).length, 0)
+    : completedMyTasks;
+  const adminRate = adminTotalTasks > 0 ? Math.round((adminDoneTasks / adminTotalTasks) * 100) : 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-slate-50/30">
-      {/* Premium Header Banner with Personal Progress Indicator */}
+      {/* Header */}
       <div className="relative overflow-hidden border-b border-slate-200/80 bg-white px-8 py-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
         <div className="absolute right-0 top-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-indigo-50/30 blur-3xl" />
-        
+
         <div className="relative flex flex-col gap-1.5">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-indigo-600">
             <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-            My Dashboard
+            {isAdmin ? 'Admin View' : 'My Dashboard'}
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">My Work</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+            {isAdmin ? 'Team Work' : 'My Work'}
+          </h1>
           {data.currentSprint && (
             <p className="text-xs text-slate-500 font-medium leading-relaxed">
               Active Sprint:{' '}
@@ -117,125 +278,47 @@ function MyWorkContent({ data }: { data: MyWorkDto }) {
           )}
         </div>
 
-        {/* Mini progress tracker ring/widget */}
-        {totalMyTasks > 0 && (
+        {adminTotalTasks > 0 && (
           <div className="relative flex items-center gap-4 bg-slate-50/60 border border-slate-200/60 rounded-2xl px-5 py-3 shadow-inner">
             <div className="flex flex-col">
-              <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">My Progress</span>
-              <span className="text-sm font-black text-slate-800">{completedMyTasks} / {totalMyTasks} tasks done</span>
+              <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+                {isAdmin ? 'Team Progress' : 'My Progress'}
+              </span>
+              <span className="text-sm font-black text-slate-800">{adminDoneTasks} / {adminTotalTasks} tasks done</span>
             </div>
             <div className="relative h-12 w-12 flex-shrink-0 flex items-center justify-center">
               <svg className="h-full w-full transform -rotate-90">
                 <circle cx="24" cy="24" r="20" stroke="#f1f5f9" strokeWidth="4" fill="transparent" />
                 <circle cx="24" cy="24" r="20" stroke="#6366f1" strokeWidth="4" fill="transparent"
                   strokeDasharray={`${2 * Math.PI * 20}`}
-                  strokeDashoffset={`${2 * Math.PI * 20 * (1 - completionRate / 100)}`}
+                  strokeDashoffset={`${2 * Math.PI * 20 * (1 - adminRate / 100)}`}
                   strokeLinecap="round" />
               </svg>
-              <span className="absolute text-[10px] font-extrabold text-indigo-600">{completionRate}%</span>
+              <span className="absolute text-[10px] font-extrabold text-indigo-600">{adminRate}%</span>
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex-1 px-8 py-8 space-y-9 max-w-[1400px] w-full mx-auto">
-        {/* Today's focus */}
-        {pendingFocus.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
-              <span className="flex h-6 w-6 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 text-xs shadow-sm">⚡</span>
-              Today's Focus
-            </h2>
-            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
-              {pendingFocus.map((t) => <TaskCard key={t.id} task={t} />)}
-            </div>
-          </section>
-        )}
-
-        {/* Blocked Tasks (Surfaced proudly) */}
-        {blockedTasks.length > 0 && (
-          <section className="rounded-2xl border border-rose-200/60 bg-rose-50/10 p-6 shadow-[0_2px_12px_rgba(244,63,94,0.01)] space-y-4 animate-pulse">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-rose-700 uppercase tracking-wider">
-              <span className="flex h-6 w-6 items-center justify-center rounded-xl bg-rose-500 text-white text-xs shadow-md">🚫</span>
-              Blocked Tasks ({blockedTasks.length})
-            </h2>
-            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
-              {blockedTasks.map((t) => <TaskCard key={t.id} task={t} />)}
-            </div>
-          </section>
-        )}
-
-        {/* P0 - Must Ship */}
-        {p0Tasks.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
-              <span className="rounded-lg border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-black text-red-600 shadow-sm">P0</span>
-              Must Ship
-            </h2>
-            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
-              {p0Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
-            </div>
-          </section>
-        )}
-
-        {/* P1 - Should Ship */}
-        {p1Tasks.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
-              <span className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-black text-amber-600 shadow-sm">P1</span>
-              Should Ship
-            </h2>
-            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
-              {p1Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
-            </div>
-          </section>
-        )}
-
-        {/* P2 - Nice to Have */}
-        {p2Tasks.length > 0 && (
-          <section className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
-            <details className="group/details">
-              <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-slate-700 uppercase tracking-wider select-none">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-black text-slate-500">P2</span>
-                  Nice-to-have ({p2Tasks.length})
-                </div>
-                <svg className="h-4 w-4 text-slate-400 group-open/details:rotate-180 transition-transform duration-250" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </summary>
-              <div className="mt-5 grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in">
-                {p2Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
-              </div>
-            </details>
-          </section>
-        )}
-
-        {/* Upcoming */}
-        {data.upcomingTasks.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Upcoming sprints</h2>
-            <div className="grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3 opacity-60">
-              {data.upcomingTasks.slice(0, 6).map((t) => <TaskCard key={t.id} task={t} />)}
-            </div>
-          </section>
-        )}
-
-        {/* Completed list */}
-        {doneTasks.length > 0 && (
-          <section className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
-            <details className="group/details">
-              <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider select-none">
-                <span>Completed Tasks ({doneTasks.length})</span>
-                <svg className="h-4 w-4 text-slate-400 group-open/details:rotate-180 transition-transform duration-250" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </summary>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 opacity-60 animate-fade-in">
-                {doneTasks.map((t) => <TaskCard key={t.id} task={t} />)}
-              </div>
-            </details>
-          </section>
+      <div className="flex-1 px-8 py-8 max-w-[1400px] w-full mx-auto">
+        {isAdmin ? (
+          // Admin: show each team member's work in separate cards
+          <div className="space-y-6">
+            {allMembersWork.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-8">No team members found in this project.</p>
+            ) : (
+              allMembersWork.map((mw) => (
+                <MemberWorkSection key={mw.member.id} memberWork={mw} />
+              ))
+            )}
+          </div>
+        ) : (
+          // Regular user: show their own tasks
+          <TaskSections
+            currentSprintTasks={data.currentSprintTasks}
+            todayFocus={data.todayFocus}
+            upcomingTasks={data.upcomingTasks}
+          />
         )}
       </div>
     </div>
