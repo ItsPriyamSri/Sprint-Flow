@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useLayoutEffect, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { confirmDeleteSprint } from '@/lib/deleteActions';
 import type { SprintBoardDto, SprintTaskDto, EpicDto, SprintDto } from '@sprintflow/shared';
-import { updateTask, upsertAssignment, removeAssignment } from '@/lib/api/tasks';
+import { deleteTask, updateTask, upsertAssignment, removeAssignment } from '@/lib/api/tasks';
 import { updateSprint } from '@/lib/api/sprints';
 import { updateEpic, updateProjectMember } from '@/lib/api/projects';
 import { ScrumTaskDrawer } from './ScrumTaskDrawer';
@@ -526,6 +529,7 @@ function EditableSprintHeader({
   const [tempReleaseDate, setTempReleaseDate] = useState(sprint.releaseDate ? sprint.releaseDate.slice(0, 10) : '');
 
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const mutation = useMutation({
     mutationFn: (patch: any) => updateSprint(sprint.id, workspaceId, patch),
@@ -535,6 +539,17 @@ function EditableSprintHeader({
       setEditingField(null);
     },
   });
+
+  const handleDeleteSprint = () => {
+    void confirmDeleteSprint({
+      sprintId: sprint.id,
+      sprintName: sprint.name,
+      workspaceId,
+      projectId: sprint.projectId,
+      queryClient,
+      onDeleted: () => router.push('/overview'),
+    });
+  };
 
   const usedPct = budgetHours > 0 ? Math.min(100, Math.round((plannedHours / budgetHours) * 100)) : 0;
   const isOver = plannedHours > budgetHours;
@@ -838,6 +853,13 @@ function EditableSprintHeader({
 
         {/* Right section: Budget status */}
         <div className="min-w-[200px] flex-shrink-0 flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={handleDeleteSprint}
+            className="text-[11px] font-medium text-rose-600 hover:text-rose-700 transition-colors"
+          >
+            Delete sprint
+          </button>
           {blockedCount > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 border border-red-100 px-3 py-1 text-xs font-bold text-red-600 animate-pulse">
               🚫 {blockedCount} Blocked Task{blockedCount > 1 ? 's' : ''}
@@ -940,6 +962,30 @@ function EditableCapacity({
   );
 }
 
+const BLOCK_POPUP_WIDTH = 256;
+const BLOCK_POPUP_EST_HEIGHT = 168;
+const VIEWPORT_MARGIN = 8;
+
+function clampBlockPopupPosition(anchor: DOMRect): { top: number; left: number } {
+  let left = anchor.left;
+  let top = anchor.bottom + 6;
+
+  if (left + BLOCK_POPUP_WIDTH > window.innerWidth - VIEWPORT_MARGIN) {
+    left = window.innerWidth - BLOCK_POPUP_WIDTH - VIEWPORT_MARGIN;
+  }
+  if (left < VIEWPORT_MARGIN) {
+    left = VIEWPORT_MARGIN;
+  }
+  if (top + BLOCK_POPUP_EST_HEIGHT > window.innerHeight - VIEWPORT_MARGIN) {
+    top = anchor.top - BLOCK_POPUP_EST_HEIGHT - 6;
+  }
+  if (top < VIEWPORT_MARGIN) {
+    top = VIEWPORT_MARGIN;
+  }
+
+  return { top, left };
+}
+
 // ── Blocked Status Toggle ───────────────────────────────────────────────────
 function BlockedToggle({
   taskId, blocked, blockedReason, workspaceId, onRefresh
@@ -952,6 +998,9 @@ function BlockedToggle({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [reasonInput, setReasonInput] = useState(blockedReason || '');
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
@@ -969,20 +1018,138 @@ function BlockedToggle({
     },
   });
 
+  const updatePopupPosition = useCallback(() => {
+    if (!anchorRef.current) return;
+    setPopupPos(clampBlockPopupPosition(anchorRef.current.getBoundingClientRect()));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setPopupPos(null);
+      return;
+    }
+    updatePopupPosition();
+    window.addEventListener('resize', updatePopupPosition);
+    window.addEventListener('scroll', updatePopupPosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePopupPosition);
+      window.removeEventListener('scroll', updatePopupPosition, true);
+    };
+  }, [isOpen, updatePopupPosition]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (anchorRef.current?.contains(target) || popupRef.current?.contains(target)) return;
+      setIsOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isOpen]);
+
+  const popup =
+    isOpen &&
+    popupPos &&
+    typeof document !== 'undefined' &&
+    createPortal(
+      <div
+        ref={popupRef}
+        role="dialog"
+        aria-label="Block task"
+        style={{
+          position: 'fixed',
+          top: popupPos.top,
+          left: popupPos.left,
+          width: BLOCK_POPUP_WIDTH,
+          zIndex: 9999,
+        }}
+        className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg animate-in fade-in slide-in-from-top-1 duration-150 text-left"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 pb-1 mb-1.5">
+          <span className="text-[10px] font-bold text-red-600 uppercase tracking-wide">Block Task</span>
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          <div>
+            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+              Reason for block *
+            </label>
+            <input
+              type="text"
+              value={reasonInput}
+              onChange={(e) => setReasonInput(e.target.value)}
+              placeholder="e.g. Waiting on design assets"
+              required
+              className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-red-400 focus:outline-none"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && reasonInput.trim()) {
+                  mutation.mutate({ blocked: true, blockedReason: reasonInput.trim() });
+                }
+              }}
+            />
+          </div>
+          <div className="flex justify-end gap-1.5 pt-1 border-t border-slate-50 mt-2">
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="rounded px-2 py-1 text-[10px] font-medium text-slate-500 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (reasonInput.trim()) {
+                  mutation.mutate({ blocked: true, blockedReason: reasonInput.trim() });
+                }
+              }}
+              disabled={!reasonInput.trim()}
+              className="rounded bg-red-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              Block Task
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+
   return (
     <div className="relative flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
       <button
+        ref={anchorRef}
+        type="button"
         onClick={() => {
           if (blocked) {
             mutation.mutate({ blocked: false, blockedReason: null });
           } else {
-            setIsOpen(!isOpen);
+            setIsOpen((open) => !open);
             setReasonInput('');
           }
         }}
         className={`rounded-full p-1 transition-all duration-150 transform hover:scale-110 active:scale-95 cursor-pointer ${
-          blocked 
-            ? 'text-red-600 hover:text-red-700 bg-red-100 hover:bg-red-200' 
+          blocked
+            ? 'text-red-600 hover:text-red-700 bg-red-100 hover:bg-red-200'
             : 'text-slate-350 hover:text-red-500 hover:bg-slate-50'
         }`}
         title={blocked ? `Blocked: ${blockedReason || 'No reason'}. Click to unblock.` : 'Mark as Blocked'}
@@ -991,78 +1158,29 @@ function BlockedToggle({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
       </button>
-
-      {isOpen && (
-        <div
-          className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg animate-in fade-in slide-in-from-top-1 duration-150 text-left"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between border-b border-slate-100 pb-1 mb-1.5">
-            <span className="text-[10px] font-bold text-red-600 uppercase tracking-wide">Block Task</span>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                Reason for block *
-              </label>
-              <input
-                type="text"
-                value={reasonInput}
-                onChange={(e) => setReasonInput(e.target.value)}
-                placeholder="e.g. Waiting on design assets"
-                required
-                className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-red-400 focus:outline-none"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && reasonInput.trim()) {
-                    mutation.mutate({ blocked: true, blockedReason: reasonInput.trim() });
-                  }
-                }}
-              />
-            </div>
-            <div className="flex justify-end gap-1.5 pt-1 border-t border-slate-50 mt-2">
-              <button
-                onClick={() => setIsOpen(false)}
-                className="rounded px-2 py-1 text-[10px] font-medium text-slate-500 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (reasonInput.trim()) {
-                    mutation.mutate({ blocked: true, blockedReason: reasonInput.trim() });
-                  }
-                }}
-                disabled={!reasonInput.trim()}
-                className="rounded bg-red-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                Block Task
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {popup}
     </div>
   );
 }
 
 // ── Standard Task Row ────────────────────────────────────────────────────────
 function TaskRow({
-  task, sprintDays, onEdit, onDoneToggle, members, workspaceId, onRefresh
+  task,
+  sprintDays,
+  onEdit,
+  onDoneToggle,
+  onDelete,
+  isDeleting,
+  members,
+  workspaceId,
+  onRefresh,
 }: {
   task: SprintTaskDto;
   sprintDays: number;
   onEdit: (id: string) => void;
   onDoneToggle: (id: string, done: boolean) => void;
+  onDelete: (id: string) => void;
+  isDeleting: boolean;
   members: SprintBoardDto['memberWorkload'][number]['member'][];
   workspaceId: string;
   onRefresh: () => void;
@@ -1105,7 +1223,7 @@ function TaskRow({
         />
       </td>
       <td className="px-2 py-2.5">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <EditableTitle
             taskId={task.id}
             title={task.title}
@@ -1119,6 +1237,29 @@ function TaskRow({
               🚫 Blocked
             </span>
           )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isDeleting) return;
+              if (window.confirm('Delete task? This cannot be undone.')) {
+                onDelete(task.id);
+              }
+            }}
+            disabled={isDeleting}
+            className="ml-auto rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-600 transition-all opacity-60 hover:opacity-100 disabled:opacity-30"
+            title="Delete task"
+            aria-label="Delete task"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+          </button>
         </div>
       </td>
       <td className="px-3 py-2.5">
@@ -1142,13 +1283,26 @@ function TaskRow({
 
 // ── Epic Sections ────────────────────────────────────────────────────────────
 function EpicSection({
-  epic, tasks, members, onEdit, onDoneToggle, sprintId, workspaceId, projectId, sprintDays, onTaskAdded,
+  epic,
+  tasks,
+  members,
+  onEdit,
+  onDoneToggle,
+  onDelete,
+  deletingTaskId,
+  sprintId,
+  workspaceId,
+  projectId,
+  sprintDays,
+  onTaskAdded,
 }: {
   epic: EpicDto | null;
   tasks: SprintTaskDto[];
   members: SprintBoardDto['memberWorkload'];
   onEdit: (id: string) => void;
   onDoneToggle: (id: string, done: boolean) => void;
+  onDelete: (id: string) => void;
+  deletingTaskId: string | null;
   sprintId: string;
   workspaceId: string;
   projectId: string | null;
@@ -1213,6 +1367,8 @@ function EpicSection({
                   sprintDays={sprintDays}
                   onEdit={onEdit}
                   onDoneToggle={onDoneToggle}
+                  onDelete={onDelete}
+                  isDeleting={deletingTaskId === t.id}
                   members={members.map((mw) => mw.member)}
                   workspaceId={workspaceId}
                   onRefresh={onTaskAdded}
@@ -1254,6 +1410,30 @@ function EpicSection({
 export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
   const queryClient = useQueryClient();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (taskId: string) => deleteTask(taskId, workspaceId),
+    onMutate: (taskId: string) => {
+      setDeletingTaskId(taskId);
+    },
+    onSuccess: (_, deletedTaskId) => {
+      void queryClient.invalidateQueries({ queryKey: ['sprint-board', board.sprint.id] });
+      void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['backlog'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-work'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace'] });
+      onRefresh();
+      if (activeTaskId === deletedTaskId) setActiveTaskId(null);
+    },
+    onSettled: () => {
+      setDeletingTaskId(null);
+    },
+    onError: (e: any) => {
+      alert(e?.message || 'Failed to delete task');
+    },
+  });
 
   const doneMutation = useMutation({
     mutationFn: ({ taskId, done }: { taskId: string; done: boolean }) =>
@@ -1333,6 +1513,8 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
             members={board.memberWorkload}
             onEdit={setActiveTaskId}
             onDoneToggle={handleDoneToggle}
+            onDelete={(taskId) => deleteMutation.mutate(taskId)}
+            deletingTaskId={deletingTaskId}
             sprintId={board.sprint.id}
             workspaceId={workspaceId}
             projectId={board.sprint.projectId}

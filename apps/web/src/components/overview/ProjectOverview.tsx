@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ProjectOverviewDto, SprintHealthDto } from '@sprintflow/shared';
 import { SprintCreateModal } from '@/components/scrum/SprintCreateModal';
+import { confirmDeleteSprint } from '@/lib/deleteActions';
 
 interface Props {
   data: ProjectOverviewDto;
@@ -48,7 +49,16 @@ function BufferBar({ planned, budget }: { planned: number; budget: number }) {
   );
 }
 
-function SprintCard({ sh }: { sh: SprintHealthDto }) {
+function SprintCard({
+  sh,
+  workspaceId,
+  projectId,
+}: {
+  sh: SprintHealthDto;
+  workspaceId: string;
+  projectId: string;
+}) {
+  const queryClient = useQueryClient();
   const statusColor = {
     ACTIVE:    'bg-green-100 text-green-700',
     PLANNING:  'bg-amber-100 text-amber-700',
@@ -72,9 +82,30 @@ function SprintCard({ sh }: { sh: SprintHealthDto }) {
             )}
           </div>
           <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
-            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase ${statusColor}`}>
-              {sh.sprint.status}
-            </span>
+            <div className="flex items-center gap-1">
+              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase ${statusColor}`}>
+                {sh.sprint.status}
+              </span>
+              <button
+                type="button"
+                title={`Delete ${sh.sprint.name}`}
+                onClick={() => {
+                  void confirmDeleteSprint({
+                    sprintId: sh.sprint.id,
+                    sprintName: sh.sprint.name,
+                    workspaceId,
+                    projectId,
+                    queryClient,
+                  });
+                }}
+                className="rounded p-1 text-slate-300 opacity-0 hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 transition-all"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
             {sh.sprint.releaseMilestone && (
               <span className="rounded-md bg-indigo-50 border border-indigo-100 px-2 py-0.5 text-[9px] font-extrabold text-indigo-600 tracking-wide uppercase">
                 🚀 {sh.sprint.releaseLabel ?? 'Release'}
@@ -210,7 +241,12 @@ export function ProjectOverview({ data }: Props) {
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {allSprints.map((sh) => (
-              <SprintCard key={sh.sprint.id} sh={sh} />
+              <SprintCard
+                key={sh.sprint.id}
+                sh={sh}
+                workspaceId={project.workspaceId}
+                projectId={project.id}
+              />
             ))}
             {allSprints.length === 0 && (
               <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">

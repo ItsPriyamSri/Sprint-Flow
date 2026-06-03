@@ -4,7 +4,7 @@ import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
 import { assertWorkspaceMember } from '../../lib/rbac';
-import { NotFoundError, ForbiddenError, AppError } from '../../lib/errors';
+import { NotFoundError, ForbiddenError, AppError, ConflictError } from '../../lib/errors';
 import type { Request, Response, NextFunction } from 'express';
 
 export const projectsRouter: IRouter = Router();
@@ -418,6 +418,25 @@ projectsRouter.patch(
   },
 );
 
+// ── Delete project (cascades tasks, sprints, epics) ───────────────────────────
+projectsRouter.delete('/:projectId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { projectId } = req.params as { projectId: string };
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new NotFoundError('Project');
+    await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.task.deleteMany({ where: { projectId } });
+      await tx.sprint.deleteMany({ where: { projectId } });
+      await tx.epic.deleteMany({ where: { projectId } });
+      await tx.project.delete({ where: { id: projectId } });
+    });
+
+    res.status(204).send();
+  } catch (e) { next(e); }
+});
+
 // ── Update project member capacity ────────────────────────────────────────────
 projectsRouter.patch(
   '/:projectId/members/:memberId',
@@ -444,13 +463,135 @@ projectsRouter.patch(
   },
 );
 
+function epicTaskItemDto(t: {
+  id: string;
+  title: string;
+  priority: string | null;
+  done: boolean;
+  blocked: boolean;
+  sprintId: string | null;
+  sprint: { name: string } | null;
+  assignments: { hours: unknown }[];
+}) {
+  return {
+    id: t.id,
+    title: t.title,
+    priority: t.priority,
+    done: t.done,
+    blocked: t.blocked,
+    sprintId: t.sprintId,
+    sprintName: t.sprint?.name ?? null,
+    totalHours: t.assignments.reduce((sum, a) => sum + Number(a.hours), 0),
+  };
+}
+
+const epicBodySchema = z.object({
+  name: z.string().min(1).max(200),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+});
+
+const epicPatchSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+});
+
+// ── List project epics with tasks ─────────────────────────────────────────────
+projectsRouter.get('/:projectId/epics', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectAccess(projectId, req.user!.id);
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true },
+    });
+    if (!project) throw new NotFoundError('Project');
+
+    const [epics, allTasks] = await Promise.all([
+      prisma.epic.findMany({
+        where: { projectId },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, color: true, projectId: true },
+      }),
+      prisma.task.findMany({
+        where: { projectId },
+        orderBy: [{ epicId: 'asc' }, { position: 'asc' }],
+        include: {
+          sprint: { select: { id: true, name: true } },
+          assignments: { select: { hours: true } },
+        },
+      }),
+    ]);
+
+    const epicGroups = epics.map((epic) => {
+      const tasks = allTasks.filter((t) => t.epicId === epic.id).map(epicTaskItemDto);
+      const totalTasks = tasks.length;
+      const completedTasks = tasks.filter((t) => t.done).length;
+      return {
+        epic,
+        tasks,
+        totalTasks,
+        completedTasks,
+        completionPct: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      };
+    });
+
+    const unassignedTasks = allTasks.filter((t) => !t.epicId).map(epicTaskItemDto);
+
+    res.json({
+      project,
+      epics: epicGroups,
+      unassigned: {
+        tasks: unassignedTasks,
+        totalTasks: unassignedTasks.length,
+      },
+    });
+  } catch (e) { next(e); }
+});
+
+// ── Create project epic ────────────────────────────────────────────────────────
+projectsRouter.post(
+  '/:projectId/epics',
+  validate(epicBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { projectId } = req.params as { projectId: string };
+      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!project) throw new NotFoundError('Project');
+
+      const body = req.body as { name: string; color?: string };
+
+      const existing = await prisma.epic.findFirst({
+        where: { workspaceId: project.workspaceId, name: body.name },
+      });
+      if (existing) {
+        throw new AppError('BAD_REQUEST', 'An epic with this name already exists in the workspace', 400);
+      }
+
+      const created = await prisma.epic.create({
+        data: {
+          workspaceId: project.workspaceId,
+          projectId,
+          name: body.name,
+          ...(body.color !== undefined && { color: body.color }),
+        },
+      });
+
+      res.status(201).json({
+        id: created.id,
+        name: created.name,
+        color: created.color,
+        projectId: created.projectId,
+      });
+    } catch (e) { next(e); }
+  },
+);
+
 // ── Update project epic ────────────────────────────────────────────────────────
 projectsRouter.patch(
   '/:projectId/epics/:epicId',
-  validate(z.object({
-    name: z.string().min(1).max(200).optional(),
-    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  })),
+  validate(epicPatchSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId, epicId } = req.params as { projectId: string; epicId: string };
@@ -481,6 +622,28 @@ projectsRouter.patch(
       });
 
       res.json({ id: updated.id, name: updated.name, color: updated.color, projectId: updated.projectId });
+    } catch (e) { next(e); }
+  },
+);
+
+// ── Delete project epic ────────────────────────────────────────────────────────
+projectsRouter.delete(
+  '/:projectId/epics/:epicId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { projectId, epicId } = req.params as { projectId: string; epicId: string };
+      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+
+      const epic = await prisma.epic.findFirst({ where: { id: epicId, projectId } });
+      if (!epic) throw new NotFoundError('Epic');
+
+      const taskCount = await prisma.task.count({ where: { epicId } });
+      if (taskCount > 0) {
+        throw new ConflictError('Cannot delete an epic that has tasks assigned to it');
+      }
+
+      await prisma.epic.delete({ where: { id: epicId } });
+      res.status(204).send();
     } catch (e) { next(e); }
   },
 );

@@ -1,15 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useConfirmStore } from '@/store/confirm.store';
 
 export function ConfirmDialog() {
   const request = useConfirmStore((s) => s.request);
   const answer = useConfirmStore((s) => s.answer);
+  const [typedValue, setTypedValue] = useState('');
 
   useEffect(() => {
-    if (!request) return;
+    if (!request) {
+      setTypedValue('');
+      return;
+    }
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') answer(false);
@@ -23,6 +27,8 @@ export function ConfirmDialog() {
   const isDanger = request.variant === 'danger';
   const confirmLabel = request.confirmLabel ?? (isDanger ? 'Delete' : 'Confirm');
   const cancelLabel = request.cancelLabel ?? 'Cancel';
+  const typedToken = request.requireTypedConfirm;
+  const typedOk = !typedToken || typedValue === typedToken;
 
   return createPortal(
     <div
@@ -30,14 +36,16 @@ export function ConfirmDialog() {
       role="presentation"
       onClick={() => answer(false)}
     >
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" aria-hidden />
 
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-message"
-        className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl"
+        className={`relative w-full rounded-xl border bg-white p-6 shadow-2xl ${
+          typedToken ? 'max-w-lg border-rose-200' : 'max-w-md border-slate-200'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex gap-4">
@@ -72,11 +80,29 @@ export function ConfirmDialog() {
             <h2 id="confirm-dialog-title" className="text-lg font-semibold text-slate-900">
               {request.title}
             </h2>
-            <p id="confirm-dialog-message" className="mt-2 text-sm leading-relaxed text-slate-600">
+            <p id="confirm-dialog-message" className="mt-2 text-sm leading-relaxed text-slate-600 whitespace-pre-line">
               {request.message}
             </p>
           </div>
         </div>
+
+        {typedToken && (
+          <div className="mt-5 rounded-lg border border-rose-100 bg-rose-50/60 p-4">
+            <label htmlFor="confirm-typed-input" className="block text-xs font-semibold uppercase tracking-wider text-rose-800">
+              Type <span className="font-mono normal-case">{typedToken}</span> to confirm
+            </label>
+            <input
+              id="confirm-typed-input"
+              type="text"
+              value={typedValue}
+              onChange={(e) => setTypedValue(e.target.value)}
+              autoComplete="off"
+              autoFocus
+              placeholder={typedToken}
+              className="mt-2 w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-200"
+            />
+          </div>
+        )}
 
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
@@ -88,12 +114,12 @@ export function ConfirmDialog() {
           </button>
           <button
             type="button"
-            autoFocus
+            disabled={!typedOk}
             onClick={() => answer(true)}
             className={
               isDanger
-                ? 'rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700'
-                : 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700'
+                ? 'rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40'
+                : 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40'
             }
           >
             {confirmLabel}

@@ -38,3 +38,7 @@ export async function updateSprint(
     body: JSON.stringify(patch),
   });
 }
+
+export async function deleteSprint(sprintId: string, workspaceId: string): Promise<void> {
+  return apiFetch(`/sprints/${sprintId}?workspaceId=${workspaceId}`, { method: 'DELETE' });
+}

@@ -8,6 +8,8 @@ export interface ConfirmRequest {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: ConfirmVariant;
+  /** When set, user must type this exact string (e.g. CONFIRM) before the action button is enabled. */
+  requireTypedConfirm?: string;
 }
 
 interface ConfirmStore {

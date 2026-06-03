@@ -1,9 +1,39 @@
 # SprintFlow — Build Progress & Handoff
 
-**Last updated:** 2026-06-01  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · **7 (Dashboard Customization & Backlog Import)**  
-**Status:** Scrum planning pivot shipped; dashboard inline-editing & multi-sheet backlog import fully implemented. See AI_ROADMAP.md for AI work.  
+**Last updated:** 2026-06-03  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)**  
+**Status:** Full Scrum platform through Phase 10 — dedicated **Epics** page (epics + implementing tasks), epic create/edit/delete API, cascade project delete with type-`CONFIRM` guard, sprint delete, block-task popover fix, shared confirm/delete helpers. See AI_ROADMAP.md for AI work.  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+---
+
+## Phase 10 — Epic management, destructive deletes & Epics page (2026-06-03)
+
+### What was built
+
+| Area | Detail |
+|---|---|
+| **Epic API** | `GET /projects/:projectId/epics` — epics with grouped tasks + unassigned bucket. `POST /projects/:projectId/epics` — create (name, optional color). `PATCH` / `DELETE` epic (delete blocked with **409** if tasks still reference epic). |
+| **Shared types** | `EpicTaskItemDto`, `EpicWithTasksDto`, `ProjectEpicsViewDto` in `@sprintflow/shared`. |
+| **Web API** | `getProjectEpics`, `createEpic`, `deleteEpic`; `deleteSprint`, `deleteProject` client helpers. |
+| **Epics page** | Route `/epics` — single hub for all epics: collapsible sections per epic, task table (title, priority, sprint link, hours), **No epic assigned** section, **New Epic** / **Edit epic** via `EpicFormModal`. |
+| **Navigation** | Sidebar **Epics** nav link (not an expandable list). Dashboard epic analytics remain read-only with **Manage epics** → `/epics`. Removed duplicate epic UI from Overview and sidebar tree. |
+| **Sprint delete** | `DELETE /sprints/:sprintId?workspaceId=` — **409** if sprint has tasks. Trash on sidebar sprint rows + Overview sprint cards + **Delete sprint** on sprint board header. |
+| **Project delete** | `DELETE /projects/:projectId` — transactional cascade (tasks → sprints → epics → project). Prominent `ConfirmDialog` requires typing **`CONFIRM`**. Entry: project switcher → **Delete project**. |
+| **UX fixes** | `BlockedToggle` popover rendered via portal + viewport clamping (no clip inside overflow scroll areas). |
+| **Cache / helpers** | `invalidateProjectScopedQueries` (+ `project-epics` key); `confirmDeleteSprint` / `confirmDeleteProject` in `lib/deleteActions.ts`; `requireTypedConfirm` on confirm store. |
+
+### Verification (2026-06-03)
+
+- `pnpm --filter @sprintflow/api typecheck` — pass  
+- `pnpm --filter @sprintflow/web typecheck` — pass  
+- Manual: **Epics** page lists tasks per epic; create/edit/delete epic refreshes board filters; delete empty sprint; delete project after typing CONFIRM removes all project data; block popup fully visible on left-column tasks.
+
+### Known follow-ups (not blocking)
+
+- Epic page: open task in drawer from task row (today read-only list + sprint links)  
+- Sprint delete with type-`CONFIRM` (project delete already has it)  
+- Automated E2E for epic CRUD and cascade project delete  
 
 ---
 
@@ -132,10 +162,12 @@ sprintflow/
 │        │  │                 CreateTaskForm · DragOverlayCard
 │        │  └─ import/        ImportWizard · Step1Upload · Step2Mapping ·
 │        │                   Step3Preview · Step4Commit
-│        ├─ lib/api/          client (fetch+refresh), auth, import, tasks, boards, workspaces
+│        │  └─ scrum/         SprintBoardView · EpicFormModal · InlineAddTask · SprintCreateModal
+│        ├─ lib/api/          client (fetch+refresh), auth, import, tasks, boards, projects, sprints
+│        ├─ lib/              queryInvalidation · deleteActions
 │        ├─ hooks/            useRequireAuth
 │        ├─ providers/        Providers (React Query + API client wiring)
-│        └─ store/            auth.store (Zustand+localStorage), board.store (Zustand)
+│        └─ store/            auth.store, board.store, project.store, confirm.store
 ├─ packages/
 │  ├─ db/                    Prisma schema, migrations, seed, generated client
 │  ├─ shared/                Zod schemas + TypeScript types (web↔api contract)
@@ -263,6 +295,12 @@ pnpm --filter @sprintflow/web dev    # http://localhost:3002
 # Or: pnpm dev
 ```
 
+**Local dev gotchas (2026-06-02):**
+- Postgres must be running before starting the API (`docker compose -f docker-compose.dev.yml up -d`).
+- Root `.env` `DATABASE_URL` must use host port **5433** (maps to container 5432). Avoid duplicate/conflicting env blocks in `.env`.
+- `pnpm db:seed` loads the root `.env` via `tsx --env-file=../../.env` in `packages/db/package.json`.
+- Web dev server always runs on **3002** regardless of `WEB_PORT` in `.env`; set `CORS_ORIGIN=http://localhost:3002`.
+
 **Verification flow:**
 1. Open `http://localhost:3002` → `/login` → `/overview`
 2. Log in as `admin@sprintflow.local` / `Admin1234!`
@@ -351,6 +389,9 @@ This is the final MVP phase. Estimated scope: ~1 day.
 | `apps/web/src/lib/api/client.ts` | `apiFetch` — auto-refresh on 401, handles auth errors |
 | `apps/web/src/store/auth.store.ts` | Zustand auth state, persisted to localStorage |
 | `apps/web/src/store/board.store.ts` | `activeView`, `filters`, `activeTaskId` — board-level UI state |
+| `apps/web/src/components/scrum/SprintBoardView.tsx` | Sprint board — inline edits, blocked toggle, add/delete tasks, owner chips |
+| `apps/web/src/components/scrum/InlineAddTask.tsx` | Inline task creation on sprint board (title, priority, owner, hours) |
+| `apps/web/src/app/(app)/backlog/page.tsx` | Backlog table with search, filters, analytics summary cards |
 
 ---
 
@@ -408,14 +449,16 @@ curl -I http://localhost:3000              # → HTTP 200
 
 ## MVP + Scrum platform status
 
-Phases 0–8 shipped. Core promise:
+Phases 0–9 shipped. Core promise:
 
 > Upload the Excel workbook you already use. Within a minute you have a project Overview, sprint boards, capacity views, and a Flow Kanban — no manual re-entry.
 
 **What's been built:**
 - Excel → **project dashboard** + Flow board (import binds to active project)
-- Scrum: Overview, per-sprint board, My Work, Team, Backlog, onboarding wizard
-- Flow: Kanban DnD, filters (P0/P1/P2), task drawer
+- Scrum: Overview, per-sprint board, My Work, Team, Backlog (search/filter + analytics), onboarding wizard
+- Sprint board: inline add task (`InlineAddTask`), per-row delete, empty-sprint UX for UI-created sprints
+- Flow: Kanban DnD, filters (P0/P1/P2), task drawer; cross-view React Query invalidation on task moves
+- Blocked tasks, comment edit/delete (own), workspace Activity timeline, executive Project Dashboard
 - `Project` / `ProjectMember` / `TaskAssignment` model for CARR-style hour planning
 - JWT auth, workspace membership checks on sensitive routes, audit trail
 - Production Docker Compose deployment
@@ -460,6 +503,34 @@ The original architecture plan: `C:\Users\surya\.claude\plans\claude-code-master
 
 ---
 
+## Phase 9 — Backlog UX & Sprint CRUD Polish (2026-06-02)
+
+### What was built
+
+| Area | Detail |
+|---|---|
+| **Backlog page** | Search by title/epic; filter by priority and epic; summary analytics cards (total hours, blocked count, deferred count); promote-to-sprint unchanged. |
+| **Cross-view cache sync** | Flow board moves, sprint-board assignment/blocked/done toggles, and task deletes invalidate `project-overview`, `project-dashboard`, `sprint-board`, `backlog`, `my-work`, and `workspace` queries so Scrum views stay in sync with Flow. |
+| **Sprint board — add task** | `InlineAddTask` per epic section: title, P0/P1/P2, owner, hours; creates task in first Flow column with `sprintId` + `projectId`; optional `TaskAssignment`. |
+| **Sprint board — empty sprint UX** | UI-created sprints with zero tasks render a **No Epic** section so **Add task** is always available (no dead-end empty state). |
+| **Sprint board — delete task** | Trash icon on each task row with confirm dialog; calls `DELETE /tasks/:id`; closes drawer if active task deleted; invalidates all project views. |
+| **Dev DX** | `packages/db` seed script loads root `.env` (`tsx --env-file=../../.env`); documented Postgres port / CORS / duplicate-`.env` pitfalls. |
+
+### Verification (2026-06-02)
+
+- `pnpm exec tsc --noEmit -p apps/api` — pass
+- `pnpm exec tsc --noEmit -p apps/web` — pass
+- Manual: create sprint in UI → **Add task** → task appears on sprint board and Overview; delete task → removed from all views; backlog search/filter narrows rows; Flow drag updates Overview counts without refresh.
+
+### Known follow-ups (not blocking)
+
+- My Work requires `TaskAssignment` rows (owner must match `ProjectMember`)
+- Onboarding “add member” needs invite-by-email or workspace member picker only
+- Flow toggle embedded in sprint board (Flow is a separate route today)
+- No automated E2E tests for sprint add/delete or backlog filters
+
+---
+
 ## 🎬 SprintFlow Platform Live Demo Script
 
 This script provides a step-by-step narrative to showcase the entire end-to-end capabilities of SprintFlow—from importing raw Excel workbooks to executive tracking and team collaboration.
@@ -483,7 +554,9 @@ This script provides a step-by-step narrative to showcase the entire end-to-end 
   1. Observe the **Project Overview** page. Point out the beautiful cards representing each sprint.
   2. Show the **Sprint Health progress bar** on active cards (task completion percentage), capacity summaries, and task distributions (Todo · In Progress · Done · Blocked counts).
   3. Click **+ Create Sprint** in the sidebar: name it "Sprint 3", set dates, goals, and assign it to a "Release 1.0 Milestone". Submit it.
-  * **Result:** "Sprint 3" instantly appears in the sidebar sprint list under the timeline, fully reactive.
+  4. Open the new sprint board → click **Add task** under any epic (or the default No Epic section) → enter title, priority, owner, hours → confirm.
+  5. Optionally delete a manually added task via the trash icon on the row (confirm dialog).
+  * **Result:** "Sprint 3" instantly appears in the sidebar sprint list; tasks can be added and removed without re-importing Excel.
 
 ---
 
@@ -508,8 +581,9 @@ This script provides a step-by-step narrative to showcase the entire end-to-end 
   2. Point out that your assigned tasks are beautifully organized by priority: P0, P1, and Nice-to-have.
   3. Point out the **surfaced Blocked Tasks section** right above the P2 items, highlighted with red styling. The blocker reason is displayed inside the card so you know exactly why you are blocked.
   4. Navigate to the **Backlog** page.
-  5. Point out the table showing tasks with no sprint assigned, or marked as deferred. 
-  6. Show the **Blocked column** and the warning border on blocked backlog rows with their block reasons.
+  5. Point out the summary analytics cards (total hours, blocked, deferred) and the search/filter bar (by title, priority, epic).
+  6. Show the table of tasks with no sprint assigned or marked deferred.
+  7. Show the **Blocked column** and the warning border on blocked backlog rows with their block reasons.
   * **Result:** Complete team transparency. Blocker reasons are front-and-center so nothing falls through the cracks.
 
 ---

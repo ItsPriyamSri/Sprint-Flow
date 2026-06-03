@@ -1,7 +1,7 @@
 import { apiFetch } from './client';
 import type {
   ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto,
-  ProjectMemberDto, TeamViewDto, DashboardDto,
+  ProjectMemberDto, TeamViewDto, DashboardDto, EpicDto, ProjectEpicsViewDto,
 } from '@sprintflow/shared';
 
 export type { ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto, ProjectMemberDto, TeamViewDto, DashboardDto };
@@ -44,6 +44,10 @@ export async function updateProject(
   return apiFetch(`/projects/${projectId}`, { method: 'PATCH', body: JSON.stringify(patch) });
 }
 
+export async function deleteProject(projectId: string): Promise<void> {
+  return apiFetch(`/projects/${projectId}`, { method: 'DELETE' });
+}
+
 export async function updateProjectMember(
   projectId: string,
   memberId: string,
@@ -78,11 +82,29 @@ export async function updateEpic(
   projectId: string,
   epicId: string,
   patch: { name?: string; color?: string },
-): Promise<{ id: string; name: string; color: string | null; projectId: string | null }> {
+): Promise<EpicDto> {
   return apiFetch(`/projects/${projectId}/epics/${epicId}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
   });
+}
+
+export async function getProjectEpics(projectId: string): Promise<ProjectEpicsViewDto> {
+  return apiFetch(`/projects/${projectId}/epics`);
+}
+
+export async function createEpic(
+  projectId: string,
+  input: { name: string; color?: string },
+): Promise<EpicDto> {
+  return apiFetch(`/projects/${projectId}/epics`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteEpic(projectId: string, epicId: string): Promise<void> {
+  return apiFetch(`/projects/${projectId}/epics/${epicId}`, { method: 'DELETE' });
 }
 
 export async function getProjectDashboard(projectId: string): Promise<DashboardDto> {

@@ -4,7 +4,7 @@ import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
 import { assertWorkspaceMember } from '../../lib/rbac';
-import { AppError, NotFoundError, ForbiddenError } from '../../lib/errors';
+import { AppError, NotFoundError, ForbiddenError, ConflictError } from '../../lib/errors';
 import type { Request, Response, NextFunction } from 'express';
 
 export const sprintsRouter: IRouter = Router();
@@ -306,3 +306,26 @@ sprintsRouter.patch(
     } catch (e) { next(e); }
   },
 );
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+sprintsRouter.delete('/:sprintId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sprintId = Array.isArray(req.params['sprintId'])
+      ? req.params['sprintId'][0]!
+      : req.params['sprintId']!;
+    const workspaceId = await assertWsAccess(req, 'MEMBER');
+    const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
+    if (!sprint) throw new NotFoundError('Sprint');
+    if (sprint.workspaceId !== workspaceId) {
+      throw new ForbiddenError('Sprint not in this workspace');
+    }
+
+    const taskCount = await prisma.task.count({ where: { sprintId } });
+    if (taskCount > 0) {
+      throw new ConflictError('Cannot delete a sprint that has tasks assigned to it');
+    }
+
+    await prisma.sprint.delete({ where: { id: sprintId } });
+    res.status(204).send();
+  } catch (e) { next(e); }
+});

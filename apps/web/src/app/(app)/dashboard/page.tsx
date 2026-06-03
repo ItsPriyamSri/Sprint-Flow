@@ -393,7 +393,12 @@ export default function ProjectDashboardPage() {
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">🚀</span>
                 Epic Completion Analytics
               </h2>
-              <div className="text-[11px] font-medium text-slate-400">Scope Tracker</div>
+              <Link
+                href="/epics"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 shadow-sm shadow-indigo-100 transition-all duration-200"
+              >
+                Manage epics
+              </Link>
             </div>
             
             <div className="flex-1 space-y-4.5 overflow-y-auto pr-1">
@@ -401,6 +406,12 @@ export default function ProjectDashboardPage() {
                 <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50/40 rounded-xl border border-dashed border-slate-200">
                   <span className="text-lg">🚀</span>
                   <p className="text-xs text-slate-400 mt-1 font-medium">No epics created in this project yet.</p>
+                  <Link
+                    href="/epics?create=1"
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 transition-colors"
+                  >
+                    Create your first epic
+                  </Link>
                 </div>
               ) : (
                 epicProgress.map((ep) => {
@@ -408,14 +419,16 @@ export default function ProjectDashboardPage() {
                   return (
                     <div key={ep.epic.id} className="group space-y-1.5">
                       <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           <span
                             className="h-3 w-3 flex-shrink-0 rounded-md border border-black/5 shadow-sm group-hover:scale-110 transition-transform duration-250"
                             style={{ backgroundColor: epicColor }}
                           />
-                          <span className="truncate text-slate-800">{ep.epic.name}</span>
+                          <Link href="/epics" className="truncate text-slate-800 hover:text-indigo-600">
+                            {ep.epic.name}
+                          </Link>
                         </div>
-                        <span className="font-mono text-slate-500 font-bold">{ep.completionPct}%</span>
+                        <span className="font-mono text-slate-500 font-bold ml-2 flex-shrink-0">{ep.completionPct}%</span>
                       </div>
                       
                       {/* Premium Slider-Like Epic colored bar */}

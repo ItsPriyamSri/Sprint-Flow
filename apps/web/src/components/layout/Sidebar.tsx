@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
 import { useProjectStore } from '@/store/project.store';
 import { SprintCreateModal } from '@/components/scrum/SprintCreateModal';
+import { confirmDeleteProject, confirmDeleteSprint } from '@/lib/deleteActions';
 import type { WorkspaceInfo } from '@/lib/api/workspaces';
 
 function initials(name: string): string {
@@ -30,7 +31,7 @@ export function Sidebar({ workspace }: Props) {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
-  const { activeProject, setActiveProject } = useProjectStore();
+  const { activeProject, setActiveProject, clearProject } = useProjectStore();
   const [sprintsOpen, setSprintsOpen] = useState(true);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [createSprintOpen, setCreateSprintOpen] = useState(false);
@@ -105,6 +106,37 @@ export function Sidebar({ workspace }: Props) {
                 </svg>
                 New project
               </Link>
+              {activeProject && projects.length > 0 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setProjectMenuOpen(false);
+                    const remaining = projects.filter((p) => p.id !== activeProject.id);
+                    const deleted = await confirmDeleteProject({
+                      projectId: activeProject.id,
+                      projectName: activeProject.name,
+                      queryClient,
+                      sprintCount: activeProject.sprints?.length ?? 0,
+                      epicCount: activeProject.epics?.length ?? 0,
+                    });
+                    if (!deleted) return;
+                    if (remaining[0]) {
+                      setActiveProject(remaining[0]);
+                      router.push('/overview');
+                    } else {
+                      clearProject();
+                      router.push('/onboarding');
+                    }
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-rose-600 hover:bg-rose-50"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete project
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -152,21 +184,53 @@ export function Sidebar({ workspace }: Props) {
               {currentProjectSprints.map((s) => {
                 const href = `/sprints/${s.id}`;
                 return (
-                  <Link key={s.id} href={href}
-                    className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
-                      isActive(href) ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                  <div
+                    key={s.id}
+                    className={`group/sprint flex items-center gap-0.5 rounded-md pr-1 ${
+                      isActive(href) ? 'bg-indigo-50' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <span
-                      className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                        s.status === 'ACTIVE' ? 'bg-green-500' : s.status === 'COMPLETED' ? 'bg-slate-300' : 'bg-amber-400'
+                    <Link
+                      href={href}
+                      className={`flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-xs transition-colors ${
+                        isActive(href) ? 'font-medium text-indigo-700' : 'text-slate-500 hover:text-slate-800'
                       }`}
-                    />
-                    <span className="truncate">{s.name}</span>
-                    {s.releaseMilestone && (
-                      <span className="ml-auto flex-shrink-0 rounded bg-indigo-100 px-1 text-[9px] font-bold text-indigo-600">R</span>
-                    )}
-                  </Link>
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                          s.status === 'ACTIVE' ? 'bg-green-500' : s.status === 'COMPLETED' ? 'bg-slate-300' : 'bg-amber-400'
+                        }`}
+                      />
+                      <span className="truncate">{s.name}</span>
+                      {s.releaseMilestone && (
+                        <span className="ml-auto flex-shrink-0 rounded bg-indigo-100 px-1 text-[9px] font-bold text-indigo-600">R</span>
+                      )}
+                    </Link>
+                    <button
+                      type="button"
+                      title={`Delete ${s.name}`}
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        const deleted = await confirmDeleteSprint({
+                          sprintId: s.id,
+                          sprintName: s.name,
+                          workspaceId: workspace?.id ?? '',
+                          projectId: activeProject?.id,
+                          queryClient,
+                          onDeleted: () => {
+                            if (isActive(href)) router.push('/overview');
+                          },
+                        });
+                        if (deleted && isActive(href)) router.push('/overview');
+                      }}
+                      className="rounded p-0.5 text-slate-300 opacity-0 hover:bg-rose-50 hover:text-rose-600 group-hover/sprint:opacity-100 transition-all"
+                    >
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -188,6 +252,14 @@ export function Sidebar({ workspace }: Props) {
             </button>
           )}
         </div>
+
+        <Link href="/epics" className={navLinkCls('/epics')}>
+          <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+              d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+          Epics
+        </Link>
 
         <Link href="/my-work" className={navLinkCls('/my-work')}>
           <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

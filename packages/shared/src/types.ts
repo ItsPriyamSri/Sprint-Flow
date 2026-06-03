@@ -188,6 +188,34 @@ export interface EpicDto {
   projectId: string | null;
 }
 
+export interface EpicTaskItemDto {
+  id: string;
+  title: string;
+  priority: string | null;
+  done: boolean;
+  blocked: boolean;
+  sprintId: string | null;
+  sprintName: string | null;
+  totalHours: number;
+}
+
+export interface EpicWithTasksDto {
+  epic: EpicDto;
+  tasks: EpicTaskItemDto[];
+  totalTasks: number;
+  completedTasks: number;
+  completionPct: number;
+}
+
+export interface ProjectEpicsViewDto {
+  project: { id: string; name: string };
+  epics: EpicWithTasksDto[];
+  unassigned: {
+    tasks: EpicTaskItemDto[];
+    totalTasks: number;
+  };
+}
+
 // ─── My Work DTOs ─────────────────────────────────────────────────────────────
 
 export interface MyWorkTaskDto extends SprintTaskDto {
