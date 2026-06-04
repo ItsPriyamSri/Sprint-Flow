@@ -504,7 +504,7 @@ export default function OnboardingPage() {
     description: '',
     daysPerWeek: 6,
     daysPerSprint: 6,
-    members: [
+    members: user?.role === 'ADMIN' ? [] : [
       {
         userId: user?.id ?? '',
         name: user?.name ?? '',

@@ -179,7 +179,7 @@ export default function EpicsPage() {
         epic={epicModal.epic}
       />
 
-      <div className="relative overflow-hidden border-b border-slate-200/80 bg-white px-8 py-6 shadow-sm">
+      <div className="border-b border-slate-200/80 bg-white px-8 py-6 shadow-sm">
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">Epics</h1>

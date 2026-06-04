@@ -107,27 +107,21 @@ async function main() {
   });
   console.log(`  ✓ Project: ${project.name}`);
 
-  // Project members (Alex = lead, Iris + Nate = member, 6 hrs/day each)
-  const pmAlexId = `pm-alex-${projectId}`;
+  // Project members (Iris = lead, Nate = member, 6 hrs/day each; admin is manager, not a member)
   const pmIrisId = `pm-iris-${projectId}`;
   const pmNateId = `pm-nate-${projectId}`;
 
-  const pmAlex = await prisma.projectMember.upsert({
-    where: { id: pmAlexId },
-    update: {},
-    create: { id: pmAlexId, projectId: project.id, userId: admin.id, role: ProjectRole.LEAD, hoursPerDay: 6 },
-  });
-  const pmIris = await prisma.projectMember.upsert({
+  await prisma.projectMember.upsert({
     where: { id: pmIrisId },
     update: {},
-    create: { id: pmIrisId, projectId: project.id, userId: irisUser.id, role: ProjectRole.MEMBER, hoursPerDay: 6 },
+    create: { id: pmIrisId, projectId: project.id, userId: irisUser.id, role: ProjectRole.LEAD, hoursPerDay: 6 },
   });
-  const pmNate = await prisma.projectMember.upsert({
+  await prisma.projectMember.upsert({
     where: { id: pmNateId },
     update: {},
     create: { id: pmNateId, projectId: project.id, userId: nateUser.id, role: ProjectRole.MEMBER, hoursPerDay: 6 },
   });
-  console.log(`  ✓ Project members: Alex (lead), Iris, Nate`);
+  console.log(`  ✓ Project members: Iris (lead), Nate`);
 
   // ── Epics ────────────────────────────────────────────────────────────────────
   const epicDefs = [
@@ -221,19 +215,19 @@ async function main() {
 
   const taskDefs = [
     // Sprint 1 — Infrastructure
-    { id: `t1-${projectId}`,  sprint: sprint1Id, epic: 'Infrastructure', title: 'Provision AWS infra (VPC, RDS, ECS)', priority: 'P0' as const, col: colInProgress, done: false, assignments: [{ pm: pmAlexId, h: 8 }] },
-    { id: `t2-${projectId}`,  sprint: sprint1Id, epic: 'Infrastructure', title: 'Set up CI/CD pipeline (GitHub Actions)', priority: 'P1' as const, col: colInProgress, done: false, assignments: [{ pm: pmAlexId, h: 6 }] },
+    { id: `t1-${projectId}`,  sprint: sprint1Id, epic: 'Infrastructure', title: 'Provision AWS infra (VPC, RDS, ECS)', priority: 'P0' as const, col: colInProgress, done: false, assignments: [{ pm: pmNateId, h: 8 }] },
+    { id: `t2-${projectId}`,  sprint: sprint1Id, epic: 'Infrastructure', title: 'Set up CI/CD pipeline (GitHub Actions)', priority: 'P1' as const, col: colInProgress, done: false, assignments: [{ pm: pmNateId, h: 6 }] },
     { id: `t3-${projectId}`,  sprint: sprint1Id, epic: 'Infrastructure', title: 'Configure Secrets Manager + env', priority: 'P1' as const, col: colTodo, done: false, assignments: [{ pm: pmNateId, h: 4 }] },
     // Sprint 1 — Core API
-    { id: `t4-${projectId}`,  sprint: sprint1Id, epic: 'Core API', title: 'Auth service — JWT + refresh tokens', priority: 'P0' as const, col: colInProgress, done: false, assignments: [{ pm: pmIrisId, h: 10 }, { pm: pmAlexId, h: 2 }] },
+    { id: `t4-${projectId}`,  sprint: sprint1Id, epic: 'Core API', title: 'Auth service — JWT + refresh tokens', priority: 'P0' as const, col: colInProgress, done: false, assignments: [{ pm: pmIrisId, h: 10 }] },
     { id: `t5-${projectId}`,  sprint: sprint1Id, epic: 'Core API', title: 'User + workspace CRUD endpoints', priority: 'P1' as const, col: colTodo, done: false, assignments: [{ pm: pmIrisId, h: 8 }] },
     { id: `t6-${projectId}`,  sprint: sprint1Id, epic: 'Core API', title: 'Database migration scripts', priority: 'P1' as const, col: colTodo, done: false, assignments: [{ pm: pmNateId, h: 6 }] },
     { id: `t7-${projectId}`,  sprint: sprint1Id, epic: 'Core API', title: 'OpenAPI spec + integration tests', priority: 'P2' as const, col: colTodo, done: false, assignments: [{ pm: pmNateId, h: 6 }] },
     // Sprint 2 — UI
     { id: `t8-${projectId}`,  sprint: sprint2Id, epic: 'UI / Frontend', title: 'App shell + routing scaffold', priority: 'P0' as const, col: colBacklog, done: false, assignments: [{ pm: pmIrisId, h: 8 }] },
     { id: `t9-${projectId}`,  sprint: sprint2Id, epic: 'UI / Frontend', title: 'Auth screens (login, register, invite)', priority: 'P1' as const, col: colBacklog, done: false, assignments: [{ pm: pmIrisId, h: 8 }] },
-    { id: `t10-${projectId}`, sprint: sprint2Id, epic: 'UI / Frontend', title: 'Onboarding wizard (project creation)', priority: 'P1' as const, col: colBacklog, done: false, assignments: [{ pm: pmAlexId, h: 10 }] },
-    { id: `t11-${projectId}`, sprint: sprint2Id, epic: 'UI / Frontend', title: 'Sprint Board view — epic-grouped table', priority: 'P0' as const, col: colBacklog, done: false, assignments: [{ pm: pmAlexId, h: 12 }, { pm: pmIrisId, h: 4 }] },
+    { id: `t10-${projectId}`, sprint: sprint2Id, epic: 'UI / Frontend', title: 'Onboarding wizard (project creation)', priority: 'P1' as const, col: colBacklog, done: false, assignments: [{ pm: pmNateId, h: 10 }] },
+    { id: `t11-${projectId}`, sprint: sprint2Id, epic: 'UI / Frontend', title: 'Sprint Board view — epic-grouped table', priority: 'P0' as const, col: colBacklog, done: false, assignments: [{ pm: pmIrisId, h: 12 }] },
     { id: `t12-${projectId}`, sprint: sprint2Id, epic: 'Core API',      title: 'Projects REST API + sprint board endpoint', priority: 'P0' as const, col: colBacklog, done: false, assignments: [{ pm: pmNateId, h: 8 }] },
     // Deferred (backlog)
     { id: `t13-${projectId}`, sprint: null, epic: 'QA & Testing', title: 'E2E test suite (Playwright)', priority: 'P2' as const, col: colBacklog, done: false, deferred: true, deferredReason: 'Deprioritised — blocked on stable API surface', assignments: [] },

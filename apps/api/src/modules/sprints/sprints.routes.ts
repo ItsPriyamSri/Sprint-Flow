@@ -76,6 +76,7 @@ sprintsRouter.get('/:sprintId/board', async (req: Request, res: Response, next: 
           select: {
             id: true, daysPerWeek: true,
             members: {
+              where: { user: { role: { not: 'ADMIN' } } },
               include: {
                 user: { select: { id: true, name: true, email: true, status: true } },
               },

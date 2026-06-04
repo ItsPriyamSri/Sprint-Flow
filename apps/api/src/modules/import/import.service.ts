@@ -323,14 +323,17 @@ export async function commitImport(
             }
             stubUserCache.set(cacheKey, userId);
 
-            // Upsert ProjectMember so TaskAssignment FK is satisfiable
+            // Upsert ProjectMember so TaskAssignment FK is satisfiable — skip admin users
             if (!projectMemberCache.has(cacheKey)) {
-              const pm = await tx.projectMember.upsert({
-                where: { projectId_userId: { projectId, userId } },
-                update: {},
-                create: { projectId, userId, role: 'MEMBER', hoursPerDay: 6 },
-              });
-              projectMemberCache.set(cacheKey, pm.id);
+              const resolvedUser = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
+              if (resolvedUser?.role !== 'ADMIN') {
+                const pm = await tx.projectMember.upsert({
+                  where: { projectId_userId: { projectId, userId } },
+                  update: {},
+                  create: { projectId, userId, role: 'MEMBER', hoursPerDay: 6 },
+                });
+                projectMemberCache.set(cacheKey, pm.id);
+              }
             }
           }
         }
