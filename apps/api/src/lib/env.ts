@@ -14,7 +14,7 @@ export const env = {
   JWT_REFRESH_SECRET: req('JWT_REFRESH_SECRET'),
   JWT_ACCESS_EXPIRES_IN: opt('JWT_ACCESS_EXPIRES_IN', '15m'),
   JWT_REFRESH_EXPIRES_IN: opt('JWT_REFRESH_EXPIRES_IN', '7d'),
-  CORS_ORIGIN: opt('CORS_ORIGIN', 'http://localhost:3000'),
+  CORS_ORIGIN: opt('CORS_ORIGIN', 'http://localhost:3002'),
   STORAGE_DRIVER: opt('STORAGE_DRIVER', 'local') as 'local',
   STORAGE_LOCAL_DIR: opt('STORAGE_LOCAL_DIR', './storage'),
   STORAGE_MAX_FILE_SIZE_MB: parseInt(opt('STORAGE_MAX_FILE_SIZE_MB', '20'), 10),

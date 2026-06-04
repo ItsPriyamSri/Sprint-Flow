@@ -73,5 +73,5 @@ temp/
 docker-compose.override.yml
 
 # ── markdown (all except README) ──────────────────────────────────────────────
-*.md
 !README.md
+*.md

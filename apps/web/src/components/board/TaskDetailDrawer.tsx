@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getTask, updateTask, deleteTask, createComment, type TaskDetail } from '@/lib/api/tasks';
+import { getTask, updateTask, deleteTask, createComment, upsertAssignment, removeAssignment, type TaskDetail } from '@/lib/api/tasks';
 import { useAuthStore } from '@/store/auth.store';
 import { confirm } from '@/store/confirm.store';
 import { ApiError } from '@/lib/api/client';
 import { getActivity, describeActivity, timeAgo } from '@/lib/api/activity';
 import { getMyWorkspace } from '@/lib/api/workspaces';
-import { listWorkspaceUsers } from '@/lib/api/users';
 import { useBoardStore } from '@/store/board.store';
 import {
   boardQueryKey,
@@ -132,6 +131,152 @@ function CommentItem({
   );
 }
 
+interface ProjectMemberLite {
+  id: string;
+  name: string;
+  role: string;
+  hoursPerDay: number;
+}
+
+function AssignmentsEditor({
+  task, taskId, wsId, projectId, projectMembers, onSaved,
+}: {
+  task: TaskDetail;
+  taskId: string;
+  wsId: string;
+  projectId: string | null;
+  projectMembers: ProjectMemberLite[];
+  onSaved: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [addingMemberId, setAddingMemberId] = useState('');
+  const [addingHours, setAddingHours] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editHours, setEditHours] = useState('');
+
+  const upsertMut = useMutation({
+    mutationFn: ({ memberId, hours }: { memberId: string; hours: number }) =>
+      upsertAssignment(taskId, wsId, memberId, hours),
+    onSuccess: () => {
+      setAddingMemberId('');
+      setAddingHours('');
+      setEditingId(null);
+      onSaved();
+    },
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (memberId: string) => removeAssignment(taskId, wsId, memberId),
+    onSuccess: () => onSaved(),
+  });
+
+  const assignedIds = new Set(task.assignments.map((a) => a.projectMemberId));
+  const unassigned = projectMembers.filter((m) => !assignedIds.has(m.id));
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-500">Assignments</label>
+      <div className="mt-1 space-y-1.5">
+        {task.assignments.map((a) => (
+          <div key={a.id} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs">
+            <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
+              {a.memberName.slice(0, 2).toUpperCase()}
+            </div>
+            <span className="flex-1 font-medium text-slate-700">{a.memberName}</span>
+            {editingId === a.projectMemberId ? (
+              <>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={editHours}
+                  onChange={(e) => setEditHours(e.target.value)}
+                  className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs focus:border-indigo-400 focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    const h = parseFloat(editHours);
+                    if (!isNaN(h) && h >= 0) upsertMut.mutate({ memberId: a.projectMemberId, hours: h });
+                  }}
+                  disabled={upsertMut.isPending}
+                  className="rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button onClick={() => setEditingId(null)} className="text-[10px] text-slate-400 hover:text-slate-600">✕</button>
+              </>
+            ) : (
+              <>
+                <span className="font-mono text-slate-500">{a.hours}h</span>
+                <button
+                  onClick={() => { setEditingId(a.projectMemberId); setEditHours(String(a.hours)); }}
+                  className="ml-1 text-[10px] text-slate-400 hover:text-indigo-600"
+                  title="Edit hours"
+                >
+                  ✎
+                </button>
+                <button
+                  onClick={() => removeMut.mutate(a.projectMemberId)}
+                  disabled={removeMut.isPending}
+                  className="text-[10px] text-slate-400 hover:text-red-500 disabled:opacity-50"
+                  title="Remove"
+                >
+                  ✕
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+
+        {projectMembers.length > 0 && unassigned.length > 0 && (
+          <div className="flex items-center gap-2 pt-1">
+            <select
+              value={addingMemberId}
+              onChange={(e) => setAddingMemberId(e.target.value)}
+              className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none"
+            >
+              <option value="">+ Add assignee…</option>
+              {unassigned.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+            {addingMemberId && (
+              <>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={addingHours}
+                  onChange={(e) => setAddingHours(e.target.value)}
+                  placeholder="hrs"
+                  className="w-14 rounded-lg border border-slate-200 px-2 py-1 text-right text-xs focus:border-indigo-400 focus:outline-none"
+                />
+                <button
+                  onClick={() => {
+                    const h = parseFloat(addingHours);
+                    if (addingMemberId && !isNaN(h) && h >= 0) {
+                      upsertMut.mutate({ memberId: addingMemberId, hours: h });
+                    }
+                  }}
+                  disabled={!addingMemberId || !addingHours || upsertMut.isPending}
+                  className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {projectMembers.length === 0 && task.assignments.length === 0 && (
+          <p className="text-xs text-slate-400 italic">No project members — assign via Project settings.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface FormState {
   title: string;
   description: string;
@@ -208,12 +353,6 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
     staleTime: 60_000,
   });
 
-  const { data: usersResult } = useQuery({
-    queryKey: ['users', wsId],
-    queryFn: () => listWorkspaceUsers(wsId),
-    enabled: !!wsId,
-    staleTime: 60_000,
-  });
 
   const { data: activityResult } = useQuery({
     queryKey: ['task-activity', activeTaskId, wsId],
@@ -458,7 +597,10 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
                   className={inputCls}
                 >
                   <option value="">— No sprint —</option>
-                  {workspace?.sprints.map((s) => (
+                  {(task.projectId
+                    ? (workspace?.projects.find((p) => p.id === task.projectId)?.sprints ?? [])
+                    : [...(workspace?.projects.flatMap((p) => p.sprints) ?? []), ...(workspace?.sprints ?? [])]
+                  ).map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
@@ -472,7 +614,10 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
                   className={inputCls}
                 >
                   <option value="">— No epic —</option>
-                  {workspace?.epics.map((ep) => (
+                  {(task.projectId
+                    ? (workspace?.projects.find((p) => p.id === task.projectId)?.epics ?? [])
+                    : [...(workspace?.projects.flatMap((p) => p.epics) ?? []), ...(workspace?.epics ?? [])]
+                  ).map((ep) => (
                     <option key={ep.id} value={ep.id}>{ep.name}</option>
                   ))}
                 </select>
@@ -511,19 +656,23 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
                 )}
               </div>
 
-              {task && task.assignments && task.assignments.length > 0 && (
-                <div>
-                  <label className={labelCls}>Assignments</label>
-                  <div className="mt-1 space-y-1">
-                    {task.assignments.map((a) => (
-                      <div key={a.id} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs">
-                        <span className="font-medium text-slate-700">{a.memberName}</span>
-                        <span className="font-mono text-slate-500">{a.hours}h</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <AssignmentsEditor
+                task={task}
+                taskId={activeTaskId!}
+                wsId={wsId}
+                projectId={task.projectId}
+                projectMembers={
+                  task.projectId
+                    ? (workspace?.projects.find((p) => p.id === task.projectId)?.members ?? [])
+                    : []
+                }
+                onSaved={() => {
+                  queryClient.invalidateQueries({ queryKey: ['task', task.id, wsId] });
+                  queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+                  queryClient.invalidateQueries({ queryKey: ['my-work'] });
+                  queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+                }}
+              />
 
               <div>
                 <label className={labelCls}>Description</label>
