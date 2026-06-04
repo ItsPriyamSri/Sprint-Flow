@@ -1,9 +1,49 @@
 # SprintFlow — Build Progress & Handoff
 
-**Last updated:** 2026-06-03  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)**  
-**Status:** Full Scrum platform through Phase 11 — My Work page now shows all team members' tasks when logged in as admin, and personal + shared tasks only for regular members. See AI_ROADMAP.md for AI work.  
+**Last updated:** 2026-06-04  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)**  
+**Status:** Full Scrum platform through Phase 12 — admin is now a pure manager role (workspace membership only, no `ProjectMember` row), filtered from all team/capacity/assignee views. See AI_ROADMAP.md for AI work.  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+---
+
+## Phase 12 — Admin as Manager (no task assignments) (2026-06-04)
+
+### What was built
+
+| Area | Detail |
+|---|---|
+| **Migration script** | `packages/db/src/scripts/remove-admin-memberships.ts` — one-time script that deletes all `TaskAssignment` and `ProjectMember` rows for any `ADMIN` user. Run once on existing databases: `pnpm --filter @sprintflow/db exec tsx --env-file=/absolute/path/.env src/scripts/remove-admin-memberships.ts` |
+| **Seed cleanup** | Admin removed from project members entirely. Iris promoted to `LEAD`; infra/onboarding tasks redistributed to Nate. Admin remains as a `WorkspaceMember` (OWNER) — can view/edit all data, but never appears in capacity or assignee lists. |
+| **Project creation guard (A1)** | `POST /projects` now queries for admin `userId`s in the submitted members array and silently drops them before `projectMember.createMany`. Prevents future bad data at the source. |
+| **Import commit guard (A2)** | `import.service.ts` commit loop checks `user.role` before upserting a `ProjectMember` stub for an Excel owner name. If the resolved user is `ADMIN`, the `ProjectMember` upsert is skipped and the task is left unassigned. |
+| **My Work — admin stub (B2)** | `GET /projects/:id/my-work` no longer throws `403` when the admin has no `ProjectMember` row. Guard changed to `if (!projectMember && role !== 'ADMIN')`. Admin gets a synthetic member DTO (`role: 'ADMIN'`, `hoursPerDay: 0`) and empty personal task arrays; `allMembersWork` (team view) is populated as before. |
+| **My Work — team filter (B1)** | `allProjectMembers` query now adds `user: { role: { not: 'ADMIN' } }` — admin's own entry never appears in the per-member team cards even if a stale `ProjectMember` row exists. |
+| **Overview endpoint (B5)** | `GET /projects/:id` includes `where: { user: { role: { not: 'ADMIN' } } }` on the `members` include — admin hours no longer inflate `budgetPerSprint` or `memberWorkload` capacity calculations. |
+| **Dashboard endpoint (B5)** | `GET /projects/:id/dashboard` same members filter — `ownerStats` workload section only shows real team members. |
+| **Team view (B3)** | `GET /projects/:id/team` members filtered — admin excluded from per-sprint commitment table. |
+| **Sprint board (B4)** | `GET /sprints/:id/board` `project.members` filtered — admin excluded from `memberWorkload` sidebar. |
+| **Assignee picker (B6)** | `GET /users/workspace/:id` (`users.service.ts` `listUsers`) adds `role: { not: 'ADMIN' }` — admin never appears in sprint board owner pickers, task drawers, or inline add-task dropdowns. |
+| **Onboarding wizard (C1)** | `onboarding/page.tsx` initial wizard state starts with an **empty members array** when `user.role === 'ADMIN'`, instead of pre-populating the admin as LEAD. |
+| **Epics page header fix** | Removed `overflow-hidden` from the Epics page header `div` — was clipping the "+ New Epic" button at the right edge of the viewport. |
+
+### Verification (2026-06-04)
+
+- `pnpm exec tsc --noEmit -p apps/api` — pass
+- `pnpm exec tsc --noEmit -p apps/web` — pass
+- Migration script run: removed 18 `TaskAssignment` rows + 3 `ProjectMember` rows for admin.
+- `GET /projects/:id/my-work` as admin → HTTP 200, `isAdmin: true`, stub member DTO, `allMembersWork: ['Iris', 'Nate']`.
+- `GET /projects/:id/team` → `['Iris', 'Nate']`, admin absent.
+- `GET /sprints/:id/board` → `memberWorkload: ['Iris', 'Nate']`, admin absent.
+- `GET /users/workspace/:id` → `['Iris', 'Nate']`, admin absent.
+- `GET /projects/:id` overview → `project.members` and all sprint workload arrays: Iris + Nate only.
+- `POST /projects/:id/epics` → 201; `DELETE` (no tasks) → 204; `DELETE` (with tasks) → 409; duplicate name → 400.
+- `GET /projects/:id/my-work` as Iris (non-admin) → HTTP 200, `isAdmin: false`, personal tasks returned, `allMembersWork: null` — member path unaffected.
+
+### Known follow-ups (not blocking)
+
+- Wire employee email allowlist for users who are workspace `OWNER` but not `GlobalRole.ADMIN` (separate concern from this plan).
+- Automated E2E for admin My Work and member picker exclusion.
 
 ---
 
