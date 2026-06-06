@@ -39,8 +39,6 @@ import { DragOverlayCard } from './DragOverlayCard';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
 import { ViewSwitcher } from './ViewSwitcher';
 import { FilterBar } from './FilterBar';
-import { SprintView } from './views/SprintView';
-import { BacklogView } from './views/BacklogView';
 import { OwnerView } from './views/OwnerView';
 
 interface Props {
@@ -281,28 +279,6 @@ export function Board({ boardId }: Props) {
   }
 
   // ── Non-board views ───────────────────────────────────────────────────────
-  if (activeView === 'sprint') {
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        {topBar}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <SprintView board={board} />
-        </div>
-        <TaskDetailDrawer boardId={boardId} workspaceId={workspaceId} />
-      </div>
-    );
-  }
-  if (activeView === 'backlog') {
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        {topBar}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <BacklogView board={board} />
-        </div>
-        <TaskDetailDrawer boardId={boardId} workspaceId={workspaceId} />
-      </div>
-    );
-  }
   if (activeView === 'owner') {
     return (
       <div className="flex h-full min-h-0 flex-col">

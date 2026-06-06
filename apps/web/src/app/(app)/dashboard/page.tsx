@@ -135,45 +135,45 @@ export default function ProjectDashboardPage() {
         <section className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-6">
           {/* Total Tasks */}
           <div className="group relative rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.03)] hover:-translate-y-1 transition-all duration-300 ease-out">
-            <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Total Tasks</span>
+            <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Total Tasks</span>
             <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-3.5xl font-black text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">{summary.totalTasks}</span>
+              <span className="text-4xl font-black text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">{summary.totalTasks}</span>
             </div>
-            <div className="mt-2 text-[10px] text-slate-400/90 font-medium">Active inside project</div>
+            <div className="mt-2 text-xs text-slate-400/90 font-medium">Active inside project</div>
           </div>
 
           {/* Completed */}
           <div className="group relative rounded-2xl border border-emerald-100/80 bg-gradient-to-br from-emerald-50/10 to-white p-5 shadow-sm hover:shadow-[0_8px_30px_rgba(16,185,129,0.06)] hover:-translate-y-1 transition-all duration-300 ease-out">
-            <span className="text-[10px] font-bold tracking-widest text-emerald-600 uppercase">Completed</span>
+            <span className="text-xs font-bold tracking-widest text-emerald-600 uppercase">Completed</span>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-3.5xl font-black text-emerald-600 tracking-tight">{summary.completedTasks}</span>
+              <span className="text-4xl font-black text-emerald-600 tracking-tight">{summary.completedTasks}</span>
               {summary.totalTasks > 0 && (
-                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 font-bold">
+                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 font-bold">
                   {Math.round((summary.completedTasks / summary.totalTasks) * 100)}%
                 </span>
               )}
             </div>
-            <div className="mt-2 text-[10px] text-emerald-500/80 font-medium">Marked as done</div>
+            <div className="mt-2 text-xs text-emerald-500/80 font-medium">Marked as done</div>
           </div>
 
           {/* In Progress */}
           <div className="group relative rounded-2xl border border-indigo-100/80 bg-gradient-to-br from-indigo-50/10 to-white p-5 shadow-sm hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] hover:-translate-y-1 transition-all duration-300 ease-out">
-            <span className="text-[10px] font-bold tracking-widest text-indigo-600 uppercase">In Progress</span>
+            <span className="text-xs font-bold tracking-widest text-indigo-600 uppercase">In Progress</span>
             <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-3.5xl font-black text-indigo-600 tracking-tight">{summary.inProgressTasks}</span>
+              <span className="text-4xl font-black text-indigo-600 tracking-tight">{summary.inProgressTasks}</span>
             </div>
-            <div className="mt-2 text-[10px] text-indigo-500/80 font-medium">Currently active</div>
+            <div className="mt-2 text-xs text-indigo-500/80 font-medium">Currently active</div>
           </div>
 
           {/* Blocked */}
           <div className={`group relative rounded-2xl border p-5 shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 ${
-            summary.blockedTasks > 0 
-              ? 'border-rose-200 bg-gradient-to-br from-rose-50/30 to-white shadow-[0_0_15px_rgba(244,63,94,0.02)] hover:shadow-[0_8px_30px_rgba(244,63,94,0.08)]' 
+            summary.blockedTasks > 0
+              ? 'border-rose-200 bg-gradient-to-br from-rose-50/30 to-white shadow-[0_0_15px_rgba(244,63,94,0.02)] hover:shadow-[0_8px_30px_rgba(244,63,94,0.08)]'
               : 'border-slate-200/80 bg-white hover:shadow-[0_8px_30px_rgb(0,0,0,0.03)]'
           }`}>
-            <span className={`text-[10px] font-bold tracking-widest uppercase ${summary.blockedTasks > 0 ? 'text-rose-600' : 'text-slate-400'}`}>Blocked</span>
+            <span className={`text-xs font-bold tracking-widest uppercase ${summary.blockedTasks > 0 ? 'text-rose-600' : 'text-slate-400'}`}>Blocked</span>
             <div className="mt-2 flex items-center gap-1.5">
-              <span className={`text-3.5xl font-black tracking-tight ${summary.blockedTasks > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{summary.blockedTasks}</span>
+              <span className={`text-4xl font-black tracking-tight ${summary.blockedTasks > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{summary.blockedTasks}</span>
               {summary.blockedTasks > 0 && (
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
@@ -181,27 +181,27 @@ export default function ProjectDashboardPage() {
                 </span>
               )}
             </div>
-            <div className={`mt-2 text-[10px] font-medium ${summary.blockedTasks > 0 ? 'text-rose-500/90' : 'text-slate-400/90'}`}>
+            <div className={`mt-2 text-xs font-medium ${summary.blockedTasks > 0 ? 'text-rose-500/90' : 'text-slate-400/90'}`}>
               {summary.blockedTasks > 0 ? 'Requires attention' : 'No blockers'}
             </div>
           </div>
 
           {/* Backlog */}
           <div className="group relative rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.03)] hover:-translate-y-1 transition-all duration-300 ease-out">
-            <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Backlog</span>
+            <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">Backlog</span>
             <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-3.5xl font-black text-slate-800 tracking-tight group-hover:text-slate-600 transition-colors">{summary.backlogTasks}</span>
+              <span className="text-4xl font-black text-slate-800 tracking-tight group-hover:text-slate-600 transition-colors">{summary.backlogTasks}</span>
             </div>
-            <div className="mt-2 text-[10px] text-slate-400/90 font-medium">Awaiting scheduling</div>
+            <div className="mt-2 text-xs text-slate-400/90 font-medium">Awaiting scheduling</div>
           </div>
 
           {/* Deferred */}
           <div className="group relative rounded-2xl border border-amber-100/80 bg-gradient-to-br from-amber-50/10 to-white p-5 shadow-sm hover:shadow-[0_8px_30px_rgba(245,158,11,0.06)] hover:-translate-y-1 transition-all duration-300 ease-out">
-            <span className="text-[10px] font-bold tracking-widest text-amber-600 uppercase">Deferred</span>
+            <span className="text-xs font-bold tracking-widest text-amber-600 uppercase">Deferred</span>
             <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-3.5xl font-black text-amber-600 tracking-tight">{summary.deferredTasks}</span>
+              <span className="text-4xl font-black text-amber-600 tracking-tight">{summary.deferredTasks}</span>
             </div>
-            <div className="mt-2 text-[10px] text-amber-500/80 font-medium">Parked/postponed</div>
+            <div className="mt-2 text-xs text-amber-500/80 font-medium">Parked/postponed</div>
           </div>
         </section>
 
@@ -212,7 +212,7 @@ export default function ProjectDashboardPage() {
               <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">📅</span>
               Sprint Health & Progress
             </h2>
-            <div className="text-[11px] font-medium text-slate-400">Completion Metrics</div>
+            <div className="text-sm font-medium text-slate-400">Completion Metrics</div>
           </div>
           
           {sprintProgress.length === 0 ? (
@@ -248,7 +248,7 @@ export default function ProjectDashboardPage() {
                       </Link>
                     </div>
                     {sp.sprint.status === 'ACTIVE' && (
-                      <span className="rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[9px] font-extrabold text-emerald-600 uppercase tracking-wide">
+                      <span className="rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-600 uppercase tracking-wide">
                         Active
                       </span>
                     )}
@@ -262,14 +262,14 @@ export default function ProjectDashboardPage() {
                         style={{ width: `${sp.completionPct}%` }}
                       />
                     </div>
-                    <div className={`flex-shrink-0 text-center rounded px-2 py-0.5 text-[10px] font-extrabold ${getProgressTextClass(sp.completionPct)} ${getProgressBgClass(sp.completionPct)}`}>
+                    <div className={`flex-shrink-0 text-center rounded px-2 py-0.5 text-xs font-extrabold ${getProgressTextClass(sp.completionPct)} ${getProgressBgClass(sp.completionPct)}`}>
                       {sp.completionPct}%
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-2.5 pt-3 border-t border-slate-100/80">
                     <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span className="font-semibold text-slate-600">{sp.completedTasks} of {sp.totalTasks} tasks done</span>
+                      <span className="font-semibold text-sm text-slate-600">{sp.completedTasks} of {sp.totalTasks} tasks done</span>
                       {sp.blockedTasks > 0 && (
                         <span className="rounded bg-rose-50 border border-rose-100 px-1.5 py-0.5 text-[9px] font-bold text-rose-600 flex items-center gap-0.5 animate-pulse">
                           🚫 {sp.blockedTasks} Blocked
@@ -277,14 +277,14 @@ export default function ProjectDashboardPage() {
                       )}
                     </div>
                     
-                    <div className="grid grid-cols-3 gap-1 text-[9px] font-mono font-bold text-center">
-                      <div className="rounded-md bg-slate-50 border border-slate-100/70 py-1 text-slate-500">
+                    <div className="grid grid-cols-3 gap-1 text-xs font-mono font-bold text-center">
+                      <div className="rounded-md bg-slate-50 border border-slate-100/70 py-1.5 text-slate-500">
                         Total: {sp.totalTasks}
                       </div>
-                      <div className="rounded-md bg-emerald-50/50 border border-emerald-100/40 py-1 text-emerald-600">
+                      <div className="rounded-md bg-emerald-50/50 border border-emerald-100/40 py-1.5 text-emerald-600">
                         Done: {sp.completedTasks}
                       </div>
-                      <div className="rounded-md bg-indigo-50/50 border border-indigo-100/40 py-1 text-indigo-600">
+                      <div className="rounded-md bg-indigo-50/50 border border-indigo-100/40 py-1.5 text-indigo-600">
                         Active: {sp.inProgressTasks}
                       </div>
                     </div>
@@ -304,16 +304,16 @@ export default function ProjectDashboardPage() {
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">👥</span>
                 Workload Balance & Allocation
               </h2>
-              <div className="text-[11px] font-medium text-slate-400">Team Capacity</div>
+              <div className="text-sm font-medium text-slate-400">Team Capacity</div>
             </div>
             
             <div className="flex-1 overflow-x-auto">
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/60 text-[9px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                  <tr className="bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
                     <th className="px-4 py-3">Owner</th>
                     <th className="px-4 py-3 text-center">Tasks</th>
-                    <th className="px-4 py-3 text-center">Status (Done/Active/Blocked)</th>
+                    <th className="px-4 py-3 text-center">Status (Done / Active / Blocked)</th>
                     <th className="px-4 py-3 text-right">Committed Hours</th>
                   </tr>
                 </thead>
@@ -335,8 +335,8 @@ export default function ProjectDashboardPage() {
                                 {initials(o.member.name)}
                               </div>
                               <div className="min-w-0">
-                                <div className="font-bold text-slate-800 truncate">{o.member.name}</div>
-                                <div className="text-[10px] text-slate-400 font-medium">{o.member.role}</div>
+                                <div className="text-sm font-bold text-slate-800 truncate">{o.member.name}</div>
+                                <div className="text-xs text-slate-400 font-medium capitalize">{o.member.role.toLowerCase()}</div>
                               </div>
                             </div>
                           </td>
@@ -344,7 +344,7 @@ export default function ProjectDashboardPage() {
                             {o.assignedTasks}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <div className="inline-flex items-center gap-1 font-mono font-semibold text-[10px] bg-slate-50 border border-slate-100 rounded-md px-2 py-0.5 text-slate-500">
+                            <div className="inline-flex items-center gap-1 font-mono font-semibold text-xs bg-slate-50 border border-slate-100 rounded-md px-2 py-0.5 text-slate-500">
                               <span>{o.completedTasks}</span>
                               <span className="text-slate-300">/</span>
                               <span className="text-indigo-600">{o.inProgressTasks}</span>
@@ -356,7 +356,7 @@ export default function ProjectDashboardPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex flex-col items-end gap-1.5">
-                              <span className={`font-mono font-bold text-[11px] ${isOverloaded ? 'text-rose-600 animate-pulse' : 'text-slate-800'}`}>
+                              <span className={`font-mono font-bold text-xs ${isOverloaded ? 'text-rose-600 animate-pulse' : 'text-slate-800'}`}>
                                 {o.committedHours}h / {o.capacityHours}h
                               </span>
                               {/* Premium capacity progress bar */}
@@ -371,7 +371,7 @@ export default function ProjectDashboardPage() {
                                 />
                               </div>
                               {isOverloaded && (
-                                <span className="rounded bg-rose-50 border border-rose-100 px-1 py-0.2 text-[8px] font-extrabold text-rose-600 uppercase tracking-wide">
+                                <span className="rounded bg-rose-50 border border-rose-100 px-1.5 py-0.5 text-[10px] font-extrabold text-rose-600 uppercase tracking-wide">
                                   Overloaded
                                 </span>
                               )}
@@ -443,7 +443,7 @@ export default function ProjectDashboardPage() {
                           }}
                         />
                       </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                      <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
                         <span>{ep.completedTasks} of {ep.totalTasks} tasks completed</span>
                         <span className="font-semibold">{ep.totalTasks - ep.completedTasks} remaining</span>
                       </div>

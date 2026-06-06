@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useMutation } from '@tanstack/react-query';
 import { login } from '@/lib/api/auth';
 import { useAuthStore } from '@/store/auth.store';
@@ -42,9 +43,12 @@ export function LoginForm() {
 
   return (
     <div className="mx-auto w-full max-w-sm">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-indigo-600">SprintFlow</h1>
-        <p className="mt-2 text-sm text-slate-500">Sign in to your workspace</p>
+      <div className="mb-8 flex flex-col items-center gap-3">
+        <Image src="/logo.png" alt="SprintFlow" width={64} height={64} priority />
+        <div className="text-center">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">SprintFlow</h1>
+          <p className="mt-1 text-sm text-slate-500">Sign in to your workspace</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">

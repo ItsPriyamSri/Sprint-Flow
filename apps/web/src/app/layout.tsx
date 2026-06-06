@@ -5,6 +5,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'SprintFlow',
   description: 'Turn your Excel workbook into a live Scrum board.',
+  icons: { icon: '/logo.png', apple: '/logo.png' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

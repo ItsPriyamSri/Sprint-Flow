@@ -688,6 +688,7 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
         include: {
           sprint:  { select: { id: true, name: true, status: true } },
           epic:    { select: { id: true, name: true, color: true, projectId: true } },
+          column:  { select: { name: true } },
           assignments: {
             include: {
               projectMember: { select: { id: true, user: { select: { id: true, name: true } } } },
@@ -748,6 +749,7 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
         updatedAt: t.updatedAt.toISOString(),
         myHours,
         dailyTarget,
+        columnName: t.column?.name ?? 'To Do',
       };
     }
 

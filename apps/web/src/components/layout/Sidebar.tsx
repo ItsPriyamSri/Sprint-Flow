@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -56,10 +57,8 @@ export function Sidebar({ workspace }: Props) {
   return (
     <aside className="flex w-56 flex-shrink-0 flex-col border-r border-slate-200 bg-white">
       {/* Logo */}
-      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3.5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-          SF
-        </div>
+      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
+        <Image src="/logo.png" alt="SprintFlow" width={28} height={28} className="flex-shrink-0" priority />
         <span className="font-bold tracking-tight text-slate-900">SprintFlow</span>
       </div>
 

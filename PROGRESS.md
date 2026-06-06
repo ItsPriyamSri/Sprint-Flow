@@ -1,9 +1,26 @@
 # SprintFlow — Build Progress & Handoff
 
-**Last updated:** 2026-06-04  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)**  
-**Status:** Full Scrum platform through Phase 12 — admin is now a pure manager role (workspace membership only, no `ProjectMember` row), filtered from all team/capacity/assignee views. See AI_ROADMAP.md for AI work.  
+**Last updated:** 2026-06-06  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)**  
+**Status:** Full Scrum platform through Phase 13 — task state fully syncs across all views, My Work redesigned, Activity feed persistent and live. See AI_ROADMAP.md for AI work.  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+---
+
+## Phase 13 — Cross-view sync, UI polish & Activity persistence (2026-06-06)
+
+| Area | What's implemented |
+|---|---|
+| **Cross-view task state sync** | `task.done` is written to the DB on every drag-to-Done in the Flow board (`moveTask`). Checking done on the Sprint board now auto-moves the task to the Done column on the Flow board (`updateTask` auto-column logic). React Query invalidations audited across all mutation sites — `['board']` and `['project-epics']` added to SprintBoardView, Board, TaskDetailDrawer, and the shared `invalidateProjectScopedQueries` helper. |
+| **Epics page checkbox** | Was `readOnly`. Now has a real `doneMutation` that calls `updateTask` and invalidates all relevant queries. |
+| **Flow view tabs** | Removed Sprint and Backlog tabs (dedicated sidebar pages exist for both). Only Board and Owner remain. |
+| **My Work redesign** | Column-status-based task sections (Working On → In Review → Blocked → Up Next → Upcoming → Completed). Owner-view-inspired cards with animated status dots, priority badges, sprint tags, and epic color dots. Sticky compact header. Admin sees all members' work; members see only their own. |
+| **My Work header** | Was clipped by `overflow-hidden`. Made `sticky top-0 z-10 backdrop-blur-sm` with a compact single-row layout. |
+| **SprintFlow logo** | `SprintFlow logo.png` (cropped) used in Sidebar, LoginForm, AppHeader, and as browser tab favicon (`src/app/icon.png` + metadata `icons`). |
+| **Dashboard text sizes** | All invalid/tiny Tailwind classes (`text-[9px]`, `text-[10px]`, `text-3.5xl`) replaced with valid readable sizes (`text-xs`, `text-sm`, `text-4xl`). |
+| **Activity page — persistence** | Data was always in PostgreSQL (named Docker volume). Root cause was UI: `firstPage` local state reset to `[]` on SPA navigation, causing an empty flash that never resolved when React Query returned cached data synchronously. Fixed with a two-query architecture: first page reads directly from React Query (no local state, no flash); older pages accumulate in state on demand. |
+| **Activity page — freshness** | `staleTime: 0` (always refetch on mount) + `refetchInterval: 30_000` (auto-refresh every 30 s). `['activity']` added to `invalidateProjectScopedQueries` so the feed updates immediately after any task mutation. |
+| **Activity page — display** | `entityType` casing bug fixed (backend writes `'task'` lowercase; frontend was checking `=== 'Task'` → links never appeared). `TASK_DONE`, `TASK_DEFERRED`, `PROJECT_CREATED` added to action icons and descriptions. Task title included in create/delete descriptions. Default page size increased from 15 to 50. "Inspect Task" → **"View Tasks"** (→ `/board`); "View Sprint" → **"View Sprints"** (→ `/sprints`). |
 
 ---
 

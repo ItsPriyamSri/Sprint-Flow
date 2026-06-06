@@ -3,10 +3,8 @@
 import { useBoardStore, type BoardView } from '@/store/board.store';
 
 const VIEWS: { key: BoardView; label: string; icon: string }[] = [
-  { key: 'board',   label: 'Board',   icon: '⬜' },
-  { key: 'sprint',  label: 'Sprint',  icon: '🗓' },
-  { key: 'backlog', label: 'Backlog', icon: '📋' },
-  { key: 'owner',   label: 'Owner',   icon: '👤' },
+  { key: 'board', label: 'Board', icon: '⬜' },
+  { key: 'owner', label: 'Owner', icon: '👤' },
 ];
 
 export function ViewSwitcher() {

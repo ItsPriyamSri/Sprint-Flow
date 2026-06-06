@@ -219,8 +219,9 @@ export interface ProjectEpicsViewDto {
 // ─── My Work DTOs ─────────────────────────────────────────────────────────────
 
 export interface MyWorkTaskDto extends SprintTaskDto {
-  myHours: number; // this member's hours for this task
-  dailyTarget: number; // myHours / daysRemaining
+  myHours: number;
+  dailyTarget: number;
+  columnName: string;
 }
 
 export interface MemberWorkSummaryDto {

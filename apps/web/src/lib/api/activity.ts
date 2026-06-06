@@ -27,33 +27,43 @@ export async function getActivity(
   return apiFetch<{ data: ActivityEntry[]; nextCursor: string | null }>(`/activity?${params}`);
 }
 
+function taskTitle(entry: ActivityEntry): string {
+  const t =
+    (entry.diff?.after as Record<string, unknown> | undefined)?.['title'] ??
+    (entry.diff?.before as Record<string, unknown> | undefined)?.['title'];
+  return t ? `"${String(t)}"` : 'a task';
+}
+
 // Human-readable description for each action type.
 export function describeActivity(entry: ActivityEntry): string {
   const d = entry.diff;
   switch (entry.action) {
-    case 'TASK_CREATED':   return 'created this task';
-    case 'TASK_DELETED':   return 'deleted this task';
+    case 'TASK_CREATED':   return `created ${taskTitle(entry)}`;
+    case 'TASK_DELETED':   return `deleted ${taskTitle(entry)}`;
     case 'TASK_COMMENTED': return 'added a comment';
     case 'TASK_MOVED':
       return d?.before && d?.after
         ? `moved from "${String((d.before as Record<string,unknown>)['columnName'])}" → "${String((d.after as Record<string,unknown>)['columnName'])}"`
-        : 'moved this task';
+        : 'moved a task';
     case 'TASK_UPDATED': {
-      if (!d?.before) return 'updated this task';
+      if (!d?.before) return 'updated a task';
       const changed = Object.keys(d.before);
       return `updated ${changed.join(', ')}`;
     }
+    case 'TASK_DONE':     return 'marked a task done';
+    case 'TASK_DEFERRED': return 'deferred a task';
     case 'TASK_BLOCKED': {
       const reason = d?.after ? String((d.after as Record<string, unknown>)['blockedReason'] || '') : '';
-      return `blocked this task${reason ? ` (${reason})` : ''}`;
+      return `blocked a task${reason ? ` — ${reason}` : ''}`;
     }
-    case 'TASK_UNBLOCKED': return 'unblocked this task';
+    case 'TASK_UNBLOCKED': return 'unblocked a task';
     case 'IMPORT_COMMITTED': return `imported ${d?.committed ?? 0} tasks`;
     case 'IMPORT_ROLLED_BACK': return `rolled back import (${d?.deletedTasks ?? 0} tasks removed)`;
     case 'SPRINT_CREATED':  return 'created a sprint';
     case 'SPRINT_UPDATED':  return 'updated a sprint';
-    case 'COLUMN_ADDED':    return 'added a column';
-    case 'COLUMN_REORDERED':return 'reordered columns';
+    case 'COLUMN_ADDED':    return 'added a board column';
+    case 'COLUMN_REORDERED':return 'reordered board columns';
+    case 'PROJECT_CREATED': return 'created a project';
     default: return entry.action.toLowerCase().replace(/_/g, ' ');
   }
 }

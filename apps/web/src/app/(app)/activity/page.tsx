@@ -8,25 +8,30 @@ import Link from 'next/link';
 
 const ACTION_ICONS: Record<string, string> = {
   TASK_CREATED: '✨',
+  TASK_DONE: '✅',
   TASK_DELETED: '🗑️',
   TASK_COMMENTED: '💬',
   TASK_MOVED: '➡️',
   TASK_UPDATED: '✏️',
   TASK_BLOCKED: '🚫',
-  TASK_UNBLOCKED: '✅',
+  TASK_UNBLOCKED: '🔓',
+  TASK_DEFERRED: '⏸️',
   IMPORT_COMMITTED: '📤',
   IMPORT_ROLLED_BACK: '↩️',
   SPRINT_CREATED: '📅',
   SPRINT_UPDATED: '⚙️',
   COLUMN_ADDED: '🧱',
   COLUMN_REORDERED: '↕️',
+  PROJECT_CREATED: '🚀',
 };
 
 const ACTION_BG_CLASSES: Record<string, string> = {
+  TASK_DONE: 'bg-emerald-50/25 border-emerald-100 hover:border-emerald-200 shadow-[0_4px_12px_rgba(16,185,129,0.02)]',
   TASK_BLOCKED: 'bg-rose-50/40 border-rose-100 hover:border-rose-200 shadow-[0_4px_12px_rgba(244,63,94,0.015)]',
   TASK_UNBLOCKED: 'bg-emerald-50/20 border-emerald-100 hover:border-emerald-200 shadow-[0_4px_12px_rgba(16,185,129,0.015)]',
   TASK_CREATED: 'bg-indigo-50/10 border-indigo-100 hover:border-indigo-200',
   IMPORT_COMMITTED: 'bg-teal-50/15 border-teal-100 hover:border-teal-200',
+  PROJECT_CREATED: 'bg-violet-50/15 border-violet-100 hover:border-violet-200',
 };
 
 function initials(name: string): string {
@@ -59,31 +64,54 @@ function getAvatarBgColor(id: string): string {
 
 export default function ActivityPage() {
   const workspaceId = useAuthStore((s) => s.defaultWorkspaceId) ?? '';
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [allEntries, setAllEntries] = useState<ActivityEntry[]>([]);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['activity', workspaceId, cursor],
-    queryFn: () => getActivity(workspaceId, { cursor: cursor || undefined, limit: 15 }),
+  // First page: always fetched fresh, auto-refreshes, data comes directly from RQ (no local state).
+  const { data: firstPageData, isLoading, isError } = useQuery({
+    queryKey: ['activity', workspaceId],
+    queryFn: () => getActivity(workspaceId, { limit: 50 }),
     enabled: !!workspaceId,
-    staleTime: 15_000,
+    staleTime: 0,
+    refetchInterval: 30_000,
+  });
+
+  // Older pages: only fetched on demand, accumulated in local state.
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
+  const [olderEntries, setOlderEntries] = useState<ActivityEntry[]>([]);
+
+  const { data: olderPageData, isFetching: isLoadingMore } = useQuery({
+    queryKey: ['activity', workspaceId, 'older', olderCursor],
+    queryFn: () => getActivity(workspaceId, { cursor: olderCursor!, limit: 50 }),
+    enabled: !!workspaceId && !!olderCursor,
+    staleTime: Infinity,
   });
 
   useEffect(() => {
-    if (data?.data) {
-      setAllEntries((prev) => {
-        const ids = new Set(prev.map((e) => e.id));
-        const filtered = data.data.filter((e) => !ids.has(e.id));
-        return [...prev, ...filtered];
-      });
-    }
-  }, [data]);
+    if (!olderPageData?.data) return;
+    setOlderEntries((prev) => {
+      const ids = new Set(prev.map((e) => e.id));
+      return [...prev, ...olderPageData.data.filter((e) => !ids.has(e.id))];
+    });
+  }, [olderPageData]);
 
-  // Reset when workspace changes
+  // Reset older pages when workspace changes.
   useEffect(() => {
-    setAllEntries([]);
-    setCursor(null);
+    setOlderEntries([]);
+    setOlderCursor(null);
   }, [workspaceId]);
+
+  // First-page entries come directly from React Query — no local state, no empty flash on remount.
+  const recentEntries = firstPageData?.data ?? [];
+  const allEntries = [
+    ...recentEntries,
+    ...olderEntries.filter((e) => !recentEntries.some((f) => f.id === e.id)),
+  ];
+
+  const handleLoadMore = () => {
+    const cursor = olderPageData?.nextCursor ?? firstPageData?.nextCursor;
+    if (cursor) setOlderCursor(cursor);
+  };
+
+  const hasMore = olderEntries.length > 0 ? !!olderPageData?.nextCursor : !!firstPageData?.nextCursor;
 
   if (!workspaceId) {
     return (
@@ -97,18 +125,11 @@ export default function ActivityPage() {
     );
   }
 
-  const handleLoadMore = () => {
-    if (data?.nextCursor) {
-      setCursor(data.nextCursor);
-    }
-  };
-
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-slate-50/30">
-      {/* Premium Header Banner */}
+      {/* Header */}
       <div className="relative overflow-hidden border-b border-slate-200/80 bg-white px-8 py-6 shadow-sm">
         <div className="absolute right-0 top-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-indigo-50/30 blur-3xl" />
-        
         <div className="relative flex flex-col gap-1.5">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-indigo-600">
             <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
@@ -122,7 +143,7 @@ export default function ActivityPage() {
       </div>
 
       <div className="mx-auto w-full max-w-3xl flex-1 px-8 py-10">
-        {isLoading && allEntries.length === 0 ? (
+        {isLoading ? (
           <div className="space-y-6">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="flex gap-4 animate-pulse">
@@ -136,7 +157,7 @@ export default function ActivityPage() {
           </div>
         ) : isError ? (
           <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-2xl border border-slate-200/80 shadow-sm">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-500 border border-red-150 mb-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-500 border border-red-100 mb-3">
               <span className="text-lg">⚠️</span>
             </div>
             <p className="text-sm font-bold text-slate-800">Failed to load activity logs</p>
@@ -159,22 +180,19 @@ export default function ActivityPage() {
           <div className="relative border-l-2 border-slate-200/80 ml-6 pl-8 space-y-6">
             {allEntries.map((entry) => {
               const icon = ACTION_ICONS[entry.action] ?? '•';
-              const isTask = entry.entityType === 'Task';
-              const isSprint = entry.entityType === 'Sprint';
+              const isTask = entry.entityType.toLowerCase() === 'task';
+              const isSprint = entry.entityType.toLowerCase() === 'sprint';
               const cardClass = ACTION_BG_CLASSES[entry.action] ?? 'bg-white border-slate-200/70 hover:border-slate-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.02)]';
 
               return (
                 <div key={entry.id} className="relative group/item">
-                  {/* Glowing Timeline Marker with Action Icon */}
                   <span className="absolute -left-[45px] top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-white border border-slate-200 text-xs shadow-sm group-hover/item:border-indigo-400 group-hover/item:shadow-[0_0_12px_rgba(99,102,241,0.2)] transition-all duration-300 ease-out select-none">
                     {icon}
                   </span>
 
-                  {/* Activity Card */}
                   <div className={`rounded-2xl border p-5 transition-all duration-300 ease-out ${cardClass} group-hover/item:-translate-y-0.5`}>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2 border-b border-slate-100/50 pb-2">
                       <div className="flex items-center gap-2">
-                        {/* Elegant custom user initials bubble */}
                         <div className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-bold shadow-sm ${getAvatarBgColor(entry.actor.id)}`}>
                           {initials(entry.actor.name)}
                         </div>
@@ -187,23 +205,22 @@ export default function ActivityPage() {
                       {describeActivity(entry)}
                     </p>
 
-                    {/* Quick navigation link buttons with hover polish */}
                     {(isTask || isSprint) && (
                       <div className="mt-3 flex justify-end">
                         {isTask ? (
                           <Link
-                            href={`/board?task=${entry.entityId}`}
+                            href="/board"
                             className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 border border-indigo-100/50 px-2.5 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-all"
                           >
-                            <span>Inspect Task</span>
+                            <span>View Tasks</span>
                             <span className="text-[10px]">↗</span>
                           </Link>
                         ) : (
                           <Link
-                            href={`/sprints/${entry.entityId}`}
+                            href="/sprints"
                             className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 border border-indigo-100/50 px-2.5 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-all"
                           >
-                            <span>View Sprint</span>
+                            <span>View Sprints</span>
                             <span className="text-[10px]">↗</span>
                           </Link>
                         )}
@@ -214,13 +231,14 @@ export default function ActivityPage() {
               );
             })}
 
-            {data?.nextCursor && (
+            {hasMore && (
               <div className="flex justify-center pt-6">
                 <button
                   onClick={handleLoadMore}
-                  className="rounded-xl border border-slate-200/80 bg-white px-5 py-2.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition-all hover:text-slate-800 hover:border-slate-300 hover:shadow-md"
+                  disabled={isLoadingMore}
+                  className="rounded-xl border border-slate-200/80 bg-white px-5 py-2.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition-all hover:text-slate-800 hover:border-slate-300 hover:shadow-md disabled:opacity-50"
                 >
-                  Load older activity logs
+                  {isLoadingMore ? 'Loading…' : 'Load older activity'}
                 </button>
               </div>
             )}

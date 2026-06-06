@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuthStore } from '@/store/auth.store';
 
 function initials(name: string): string {
@@ -27,7 +28,8 @@ export function AppHeader({ subtitle = 'Main Board', onSignOut }: Props) {
   return (
     <header className="flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
       <div className="flex items-center gap-3">
-        <span className="text-base font-bold tracking-tight text-indigo-600">SprintFlow</span>
+        <Image src="/logo.png" alt="SprintFlow" width={24} height={24} className="flex-shrink-0" />
+        <span className="text-base font-bold tracking-tight text-slate-900">SprintFlow</span>
         <span className="hidden h-4 w-px bg-slate-200 sm:block" aria-hidden />
         <span className="hidden text-sm font-medium text-slate-500 sm:block">{subtitle}</span>
       </div>

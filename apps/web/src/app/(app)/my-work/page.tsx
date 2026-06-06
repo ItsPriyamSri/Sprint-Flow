@@ -5,197 +5,202 @@ import { useProjectStore } from '@/store/project.store';
 import { getMyWork } from '@/lib/api/projects';
 import type { MyWorkDto, MyWorkTaskDto, MemberWorkSummaryDto } from '@sprintflow/shared';
 
-const PRIORITY_COLORS: Record<string, string> = {
-  P0: 'bg-red-50 text-red-700 border-red-200/60',
-  P1: 'bg-amber-50 text-amber-700 border-amber-200/60',
-  P2: 'bg-slate-50 text-slate-600 border-slate-200/60',
+// ─── Status derivation ────────────────────────────────────────────────────────
+
+type ColStatus = 'in-progress' | 'review' | 'done' | 'todo';
+
+function getColStatus(task: MyWorkTaskDto): ColStatus {
+  if (task.done) return 'done';
+  const col = task.columnName?.toLowerCase() ?? '';
+  if (/in[\s-]?progress|doing|active|working/i.test(col)) return 'in-progress';
+  if (/review|qa|testing|feedback|check/i.test(col)) return 'review';
+  return 'todo';
+}
+
+const STATUS_CONFIG: Record<ColStatus, { label: string; dotCls: string; badgeCls: string; pulse: boolean }> = {
+  'in-progress': { label: 'In Progress', dotCls: 'bg-blue-500',    badgeCls: 'bg-blue-50 text-blue-700 border-blue-200',       pulse: true  },
+  'review':      { label: 'In Review',   dotCls: 'bg-amber-500',   badgeCls: 'bg-amber-50 text-amber-700 border-amber-200',    pulse: false },
+  'todo':        { label: 'To Do',       dotCls: 'bg-slate-400',   badgeCls: 'bg-slate-50 text-slate-600 border-slate-200',    pulse: false },
+  'done':        { label: 'Done',        dotCls: 'bg-emerald-500', badgeCls: 'bg-emerald-50 text-emerald-700 border-emerald-200', pulse: false },
 };
 
-const PRIORITY_RIBBONS: Record<string, string> = {
-  P0: 'bg-gradient-to-b from-red-400 to-rose-500',
-  P1: 'bg-gradient-to-b from-amber-400 to-orange-500',
-  P2: 'bg-gradient-to-b from-slate-300 to-slate-400',
+const PRIORITY_COLORS: Record<string, string> = {
+  P0: 'bg-red-50 text-red-700 border-red-200',
+  P1: 'bg-amber-50 text-amber-700 border-amber-200',
+  P2: 'bg-slate-50 text-slate-600 border-slate-200',
 };
+
+// ─── Task card ────────────────────────────────────────────────────────────────
 
 function TaskCard({ task }: { task: MyWorkTaskDto }) {
-  const priorityRibbon = task.priority ? PRIORITY_RIBBONS[task.priority] : 'bg-slate-200';
-  const cardBorder = task.blocked 
-    ? 'border-red-200 shadow-[0_4px_12px_rgba(244,63,94,0.01)] bg-red-50/5 hover:shadow-[0_8px_30px_rgba(244,63,94,0.04)] hover:border-red-300' 
-    : 'border-slate-200/70 bg-white hover:shadow-[0_8px_30px_rgb(0,0,0,0.025)] hover:border-slate-300';
+  const status = getColStatus(task);
+  const { label, dotCls, badgeCls, pulse } = STATUS_CONFIG[status];
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border p-5 pl-6 transition-all duration-300 ease-out hover:-translate-y-1 ${cardBorder} ${task.done ? 'opacity-55' : ''}`}>
-      {/* Priority accent side ribbon */}
-      <span className={`absolute left-0 top-0 bottom-0 w-[5px] ${priorityRibbon}`} />
-
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          {task.priority && (
-            <span className={`rounded-md border px-2 py-0.5 text-[9px] font-extrabold tracking-wide uppercase ${PRIORITY_COLORS[task.priority] ?? ''}`}>
-              {task.priority}
-            </span>
-          )}
-          {task.done && (
-            <span className="rounded-md bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[9px] font-extrabold text-emerald-600 uppercase tracking-wide">
-              ✓ Done
-            </span>
-          )}
-          {task.blocked && (
-            <span className="rounded-md bg-rose-50 border border-rose-100 px-2 py-0.5 text-[9px] font-extrabold text-rose-600 uppercase tracking-wide flex items-center gap-0.5 animate-pulse">
-              <span>🚫</span> Blocked
-            </span>
-          )}
-        </div>
-
-        <div className="min-w-0">
-          <p className={`text-sm font-bold text-slate-800 tracking-tight leading-snug ${task.done ? 'line-through text-slate-400' : ''}`}>
-            {task.title}
-          </p>
-          
-          {task.blocked && task.blockedReason && (
-            <div className="mt-2.5 rounded-xl border border-rose-100 bg-rose-50/30 px-3 py-2 text-xs font-semibold text-rose-700 leading-normal">
-              <span className="font-bold uppercase tracking-wider text-[9px] text-rose-600 block mb-0.5">Blocker Reason</span>
-              {task.blockedReason}
-            </div>
-          )}
-          
-          {task.epicName && (
-            <div className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: task.epicColor || '#6366f1' }} />
-              <span className="truncate">{task.epicName}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-2 flex items-center justify-between border-t border-slate-100/80 pt-3.5 text-xs text-slate-500 font-medium">
-          <span className="font-mono bg-slate-50 border border-slate-100/60 rounded-md px-2 py-0.5">{task.myHours}h committed</span>
-          <span className="rounded-lg bg-indigo-50/80 border border-indigo-100/50 px-2.5 py-0.5 font-bold text-indigo-600 text-[10px]">
-            ~{task.dailyTarget}h / day
+    <div
+      className={[
+        'group flex flex-col rounded-xl border bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-px',
+        task.done   ? 'opacity-55' : '',
+        task.blocked ? 'border-rose-200 bg-rose-50/20 hover:border-rose-300' : 'border-slate-200/80 hover:border-indigo-200',
+      ].join(' ')}
+    >
+      {/* Badge row */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {task.priority && (
+          <span className={`rounded border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide ${PRIORITY_COLORS[task.priority] ?? ''}`}>
+            {task.priority}
           </span>
+        )}
+        <span className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${task.blocked ? 'bg-rose-50 text-rose-700 border-rose-200' : badgeCls}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${task.blocked ? 'bg-rose-500 animate-pulse' : dotCls} ${pulse && !task.blocked ? 'animate-pulse' : ''}`} />
+          {task.blocked ? 'Blocked' : label}
+        </span>
+        {task.sprintName && (
+          <span className="rounded border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-600">
+            {task.sprintName}
+          </span>
+        )}
+      </div>
+
+      {/* Title */}
+      <p className={`mt-2.5 text-sm font-semibold leading-snug line-clamp-2 flex-1 ${task.done ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+        {task.title}
+      </p>
+
+      {/* Blocker reason */}
+      {task.blocked && task.blockedReason && (
+        <div className="mt-2 rounded-lg border border-rose-100 bg-rose-50/40 px-2.5 py-1.5 text-[10px] leading-relaxed text-rose-700">
+          <span className="block font-extrabold uppercase tracking-wider text-[8px] text-rose-500 mb-0.5">Blocker</span>
+          {task.blockedReason}
         </div>
+      )}
+
+      {/* Footer */}
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {task.epicName ? (
+            <>
+              <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: task.epicColor ?? '#6366f1' }} />
+              <span className="truncate text-[10px] font-medium text-slate-500">{task.epicName}</span>
+            </>
+          ) : (
+            <span className="text-[10px] text-slate-300">No epic</span>
+          )}
+        </div>
+        {task.myHours > 0 && (
+          <span className="flex-shrink-0 rounded border border-indigo-100/60 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-600">
+            ~{task.dailyTarget}h/day
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
+// ─── Section header ───────────────────────────────────────────────────────────
+
+function SectionHeader({
+  label, count, accent = 'default', faded = false,
+}: {
+  label: string;
+  count: number;
+  accent?: 'default' | 'active' | 'review' | 'blocked' | 'done';
+  faded?: boolean;
+}) {
+  const accentCls: Record<string, string> = {
+    default: 'text-slate-600',
+    active:  'text-blue-700',
+    review:  'text-amber-700',
+    blocked: 'text-rose-700',
+    done:    'text-emerald-700',
+  };
+  const countCls: Record<string, string> = {
+    default: 'bg-slate-100 text-slate-500',
+    active:  'bg-blue-100 text-blue-700',
+    review:  'bg-amber-100 text-amber-700',
+    blocked: 'bg-rose-100 text-rose-700',
+    done:    'bg-emerald-100 text-emerald-700',
+  };
+
+  return (
+    <div className={`flex items-center gap-2 ${faded ? 'opacity-60' : ''}`}>
+      <h3 className={`text-xs font-extrabold uppercase tracking-widest ${accentCls[accent]}`}>{label}</h3>
+      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${countCls[accent]}`}>{count}</span>
+    </div>
+  );
+}
+
+// ─── Task sections (column-status-based) ─────────────────────────────────────
+
 function TaskSections({
   currentSprintTasks,
-  todayFocus,
   upcomingTasks,
 }: {
   currentSprintTasks: MyWorkTaskDto[];
-  todayFocus: MyWorkTaskDto[];
   upcomingTasks: MyWorkTaskDto[];
 }) {
-  const pendingFocus = todayFocus.filter((t) => !t.done && !t.blocked);
-  const p0Tasks = currentSprintTasks.filter((t) => t.priority === 'P0' && !t.done && !t.blocked);
-  const p1Tasks = currentSprintTasks.filter((t) => t.priority === 'P1' && !t.done && !t.blocked);
-  const p2Tasks = currentSprintTasks.filter((t) => t.priority === 'P2' && !t.done && !t.blocked);
-  const blockedTasks = currentSprintTasks.filter((t) => t.blocked && !t.done);
-  const doneTasks = currentSprintTasks.filter((t) => t.done);
-
-  const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2 };
-  blockedTasks.sort(
-    (a, b) =>
-      (PRIORITY_ORDER[a.priority ?? 'P2'] ?? 2) -
-      (PRIORITY_ORDER[b.priority ?? 'P2'] ?? 2)
-  );
+  const inProgress = currentSprintTasks.filter((t) => !t.done && !t.blocked && getColStatus(t) === 'in-progress');
+  const inReview   = currentSprintTasks.filter((t) => !t.done && !t.blocked && getColStatus(t) === 'review');
+  const blocked    = currentSprintTasks.filter((t) => t.blocked && !t.done);
+  const todo       = currentSprintTasks.filter((t) => !t.done && !t.blocked && getColStatus(t) === 'todo');
+  const done       = currentSprintTasks.filter((t) => t.done);
 
   if (currentSprintTasks.length === 0 && upcomingTasks.length === 0) {
-    return (
-      <p className="text-xs text-slate-400 italic py-2">No tasks assigned this sprint.</p>
-    );
+    return <p className="text-xs italic text-slate-400 py-4">No tasks assigned this sprint.</p>;
   }
 
+  const grid = 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+
   return (
-    <div className="space-y-6">
-      {pendingFocus.length > 0 && (
+    <div className="space-y-8">
+      {inProgress.length > 0 && (
         <section className="space-y-3">
-          <h3 className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider">
-            <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-[10px] shadow-sm">⚡</span>
-            Today's Focus
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {pendingFocus.map((t) => <TaskCard key={t.id} task={t} />)}
-          </div>
+          <SectionHeader label="Working On" count={inProgress.length} accent="active" />
+          <div className={grid}>{inProgress.map((t) => <TaskCard key={t.id} task={t} />)}</div>
         </section>
       )}
 
-      {blockedTasks.length > 0 && (
-        <section className="rounded-xl border border-rose-200/60 bg-rose-50/10 p-4 space-y-3">
-          <h3 className="flex items-center gap-2 text-xs font-bold text-rose-700 uppercase tracking-wider">
-            <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-rose-500 text-white text-[10px] shadow-sm">🚫</span>
-            Blocked ({blockedTasks.length})
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {blockedTasks.map((t) => <TaskCard key={t.id} task={t} />)}
-          </div>
-        </section>
-      )}
-
-      {p0Tasks.length > 0 && (
+      {inReview.length > 0 && (
         <section className="space-y-3">
-          <h3 className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider">
-            <span className="rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-black text-red-600">P0</span>
-            Must Ship
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {p0Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
-          </div>
+          <SectionHeader label="In Review" count={inReview.length} accent="review" />
+          <div className={grid}>{inReview.map((t) => <TaskCard key={t.id} task={t} />)}</div>
         </section>
       )}
 
-      {p1Tasks.length > 0 && (
+      {blocked.length > 0 && (
         <section className="space-y-3">
-          <h3 className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider">
-            <span className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-600">P1</span>
-            Should Ship
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {p1Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
-          </div>
+          <SectionHeader label="Blocked" count={blocked.length} accent="blocked" />
+          <div className={grid}>{blocked.map((t) => <TaskCard key={t.id} task={t} />)}</div>
         </section>
       )}
 
-      {p2Tasks.length > 0 && (
-        <section className="bg-white rounded-xl border border-slate-200/80 p-4">
-          <details className="group/details">
-            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold text-slate-600 uppercase tracking-wider select-none">
-              <div className="flex items-center gap-2">
-                <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-black text-slate-500">P2</span>
-                Nice-to-have ({p2Tasks.length})
-              </div>
-              <svg className="h-3.5 w-3.5 text-slate-400 group-open/details:rotate-180 transition-transform duration-250" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </summary>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in">
-              {p2Tasks.map((t) => <TaskCard key={t.id} task={t} />)}
-            </div>
-          </details>
+      {todo.length > 0 && (
+        <section className="space-y-3">
+          <SectionHeader label="Up Next" count={todo.length} />
+          <div className={grid}>{todo.map((t) => <TaskCard key={t.id} task={t} />)}</div>
         </section>
       )}
 
       {upcomingTasks.length > 0 && (
         <section className="space-y-3">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Upcoming</h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 opacity-60">
-            {upcomingTasks.slice(0, 6).map((t) => <TaskCard key={t.id} task={t} />)}
+          <SectionHeader label="Upcoming" count={upcomingTasks.length} faded />
+          <div className={`${grid} opacity-50`}>
+            {upcomingTasks.slice(0, 8).map((t) => <TaskCard key={t.id} task={t} />)}
           </div>
         </section>
       )}
 
-      {doneTasks.length > 0 && (
-        <section className="bg-white rounded-xl border border-slate-200/80 p-4">
-          <details className="group/details">
-            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider select-none">
-              <span>Completed ({doneTasks.length})</span>
-              <svg className="h-3.5 w-3.5 text-slate-400 group-open/details:rotate-180 transition-transform duration-250" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      {done.length > 0 && (
+        <section>
+          <details className="group/done">
+            <summary className="flex cursor-pointer list-none select-none items-center gap-2 hover:opacity-80">
+              <SectionHeader label="Completed" count={done.length} accent="done" />
+              <svg className="h-3 w-3 text-slate-400 transition-transform group-open/done:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </summary>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 opacity-60 animate-fade-in">
-              {doneTasks.map((t) => <TaskCard key={t.id} task={t} />)}
+            <div className={`mt-3 ${grid} animate-fade-in`}>
+              {done.map((t) => <TaskCard key={t.id} task={t} />)}
             </div>
           </details>
         </section>
@@ -204,35 +209,82 @@ function TaskSections({
   );
 }
 
+// ─── Admin: per-member card ───────────────────────────────────────────────────
+
 function MemberWorkSection({ memberWork }: { memberWork: MemberWorkSummaryDto }) {
   const total = memberWork.currentSprintTasks.length;
-  const done = memberWork.currentSprintTasks.filter((t) => t.done).length;
-  const rate = total > 0 ? Math.round((done / total) * 100) : 0;
+  const doneCount = memberWork.currentSprintTasks.filter((t) => t.done).length;
+  const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+  const initials = memberWork.member.name.slice(0, 2).toUpperCase();
+  const inProgress = memberWork.currentSprintTasks.filter((t) => !t.done && getColStatus(t) === 'in-progress').length;
+  const blocked = memberWork.currentSprintTasks.filter((t) => t.blocked && !t.done).length;
 
   return (
-    <section className="rounded-2xl border border-slate-200/70 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 text-sm font-extrabold">
-            {memberWork.member.name.charAt(0).toUpperCase()}
+    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+      {/* Member header */}
+      <div className="flex items-center gap-4 border-b border-slate-100 bg-slate-50/40 px-6 py-4">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-sm font-extrabold text-white shadow-sm">
+          {initials}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold text-slate-900">{memberWork.member.name}</p>
+            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+              {memberWork.member.role}
+            </span>
           </div>
-          <div>
-            <p className="text-sm font-bold text-slate-800">{memberWork.member.name}</p>
-            <p className="text-[10px] text-slate-400 font-medium capitalize">{memberWork.member.role.toLowerCase()}</p>
+          <div className="mt-1 flex items-center gap-3 text-[10px] text-slate-500">
+            <span>{total} task{total !== 1 ? 's' : ''} this sprint</span>
+            {inProgress > 0 && (
+              <span className="flex items-center gap-1 font-semibold text-blue-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                {inProgress} in progress
+              </span>
+            )}
+            {blocked > 0 && (
+              <span className="font-semibold text-rose-600">{blocked} blocked</span>
+            )}
           </div>
         </div>
         {total > 0 && (
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className="font-semibold text-slate-700">{done}/{total}</span>
-            <span className="text-slate-300">·</span>
-            <span className="rounded-full bg-indigo-50 border border-indigo-100/50 px-2 py-0.5 font-bold text-indigo-600 text-[10px]">{rate}%</span>
+          <div className="flex flex-shrink-0 items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs font-bold text-slate-800">{doneCount}/{total}</p>
+              <p className="text-[10px] font-medium text-slate-400">done</p>
+            </div>
+            <div className="relative h-11 w-11">
+              <svg className="h-full w-full -rotate-90" viewBox="0 0 44 44">
+                <circle cx="22" cy="22" r="18" stroke="#f1f5f9" strokeWidth="4" fill="transparent" />
+                <circle
+                  cx="22" cy="22" r="18"
+                  stroke={rate === 100 ? '#10b981' : '#6366f1'}
+                  strokeWidth="4" fill="transparent"
+                  strokeDasharray={`${2 * Math.PI * 18}`}
+                  strokeDashoffset={`${2 * Math.PI * 18 * (1 - rate / 100)}`}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-indigo-600">
+                {rate}%
+              </span>
+            </div>
           </div>
         )}
       </div>
+
+      {/* Progress bar */}
+      {total > 0 && (
+        <div className="h-1 w-full bg-slate-100">
+          <div
+            className="h-full bg-indigo-500 transition-all duration-500"
+            style={{ width: `${rate}%`, backgroundColor: rate === 100 ? '#10b981' : '#6366f1' }}
+          />
+        </div>
+      )}
+
       <div className="px-6 py-5">
         <TaskSections
           currentSprintTasks={memberWork.currentSprintTasks}
-          todayFocus={memberWork.todayFocus}
           upcomingTasks={memberWork.upcomingTasks}
         />
       </div>
@@ -240,77 +292,110 @@ function MemberWorkSection({ memberWork }: { memberWork: MemberWorkSummaryDto })
   );
 }
 
+// ─── Main content ─────────────────────────────────────────────────────────────
+
 function MyWorkContent({ data }: { data: MyWorkDto }) {
-  const totalMyTasks = data.currentSprintTasks.length;
-  const completedMyTasks = data.currentSprintTasks.filter((t) => t.done).length;
-  const completionRate = totalMyTasks > 0 ? Math.round((completedMyTasks / totalMyTasks) * 100) : 0;
-
   const isAdmin = data.isAdmin;
-
-  // For admin: compute aggregate totals across all members
   const allMembersWork = data.allMembersWork ?? [];
-  const adminTotalTasks = isAdmin
-    ? allMembersWork.reduce((sum, m) => sum + m.currentSprintTasks.length, 0)
+
+  const totalMyTasks = data.currentSprintTasks.length;
+  const doneMyTasks  = data.currentSprintTasks.filter((t) => t.done).length;
+  const myRate       = totalMyTasks > 0 ? Math.round((doneMyTasks / totalMyTasks) * 100) : 0;
+
+  const adminTotal = isAdmin
+    ? allMembersWork.reduce((s, m) => s + m.currentSprintTasks.length, 0)
     : totalMyTasks;
-  const adminDoneTasks = isAdmin
-    ? allMembersWork.reduce((sum, m) => sum + m.currentSprintTasks.filter((t) => t.done).length, 0)
-    : completedMyTasks;
-  const adminRate = adminTotalTasks > 0 ? Math.round((adminDoneTasks / adminTotalTasks) * 100) : 0;
+  const adminDone = isAdmin
+    ? allMembersWork.reduce((s, m) => s + m.currentSprintTasks.filter((t) => t.done).length, 0)
+    : doneMyTasks;
+  const adminRate = adminTotal > 0 ? Math.round((adminDone / adminTotal) * 100) : 0;
+
+  const displayTotal = isAdmin ? adminTotal : totalMyTasks;
+  const displayDone  = isAdmin ? adminDone  : doneMyTasks;
+  const displayRate  = isAdmin ? adminRate  : myRate;
+
+  const myInProgress = data.currentSprintTasks.filter((t) => !t.done && getColStatus(t) === 'in-progress').length;
+  const myBlocked    = data.currentSprintTasks.filter((t) => t.blocked && !t.done).length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-slate-50/30">
-      {/* Header */}
-      <div className="relative overflow-hidden border-b border-slate-200/80 bg-white px-8 py-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-indigo-50/30 blur-3xl" />
-
-        <div className="relative flex flex-col gap-1.5">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-indigo-600">
-            <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-            {isAdmin ? 'Admin View' : 'My Dashboard'}
+      {/* ── Header ── */}
+      <div className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/95 px-8 py-4 shadow-sm backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: identity */}
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-sm font-extrabold text-white shadow-sm">
+              {(data.member.name || 'MY').slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-black tracking-tight text-slate-900">
+                  {isAdmin ? 'Team Work' : 'My Work'}
+                </h1>
+                {isAdmin && (
+                  <span className="flex-shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-indigo-600">
+                    Admin
+                  </span>
+                )}
+              </div>
+              {data.currentSprint && (
+                <p className="truncate text-xs text-slate-500">
+                  <span className="font-semibold text-slate-700">{data.currentSprint.name}</span>
+                  <span className="mx-1.5 text-slate-300">·</span>
+                  <span className="text-indigo-600">{data.daysRemaining}d left</span>
+                </p>
+              )}
+            </div>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            {isAdmin ? 'Team Work' : 'My Work'}
-          </h1>
-          {data.currentSprint && (
-            <p className="text-xs text-slate-500 font-medium leading-relaxed">
-              Active Sprint:{' '}
-              <span className="font-semibold text-slate-800">{data.currentSprint.name}</span>
-              {' '}·{' '}
-              <span className="rounded-full bg-indigo-50/80 px-2 py-0.5 font-bold text-indigo-600 text-[10px] border border-indigo-100/50">
-                {data.daysRemaining} day{data.daysRemaining !== 1 ? 's' : ''} left
-              </span>
-            </p>
-          )}
+
+          {/* Right: stats row */}
+          <div className="flex flex-shrink-0 items-center gap-3">
+            {!isAdmin && myInProgress > 0 && (
+              <div className="hidden items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 sm:flex">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-xs font-bold text-blue-700">{myInProgress} active</span>
+              </div>
+            )}
+            {!isAdmin && myBlocked > 0 && (
+              <div className="hidden items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 sm:flex">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                <span className="text-xs font-bold text-rose-700">{myBlocked} blocked</span>
+              </div>
+            )}
+            {displayTotal > 0 && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="relative h-9 w-9 flex-shrink-0">
+                  <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="14" stroke="#f1f5f9" strokeWidth="3.5" fill="transparent" />
+                    <circle
+                      cx="18" cy="18" r="14"
+                      stroke={displayRate === 100 ? '#10b981' : '#6366f1'}
+                      strokeWidth="3.5" fill="transparent"
+                      strokeDasharray={`${2 * Math.PI * 14}`}
+                      strokeDashoffset={`${2 * Math.PI * 14 * (1 - displayRate / 100)}`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-[9px] font-extrabold text-indigo-600">
+                    {displayRate}%
+                  </span>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Progress</p>
+                  <p className="text-xs font-black text-slate-800">{displayDone}/{displayTotal}</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-
-        {adminTotalTasks > 0 && (
-          <div className="relative flex items-center gap-4 bg-slate-50/60 border border-slate-200/60 rounded-2xl px-5 py-3 shadow-inner">
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
-                {isAdmin ? 'Team Progress' : 'My Progress'}
-              </span>
-              <span className="text-sm font-black text-slate-800">{adminDoneTasks} / {adminTotalTasks} tasks done</span>
-            </div>
-            <div className="relative h-12 w-12 flex-shrink-0 flex items-center justify-center">
-              <svg className="h-full w-full transform -rotate-90">
-                <circle cx="24" cy="24" r="20" stroke="#f1f5f9" strokeWidth="4" fill="transparent" />
-                <circle cx="24" cy="24" r="20" stroke="#6366f1" strokeWidth="4" fill="transparent"
-                  strokeDasharray={`${2 * Math.PI * 20}`}
-                  strokeDashoffset={`${2 * Math.PI * 20 * (1 - adminRate / 100)}`}
-                  strokeLinecap="round" />
-              </svg>
-              <span className="absolute text-[10px] font-extrabold text-indigo-600">{adminRate}%</span>
-            </div>
-          </div>
-        )}
       </div>
 
-      <div className="flex-1 px-8 py-8 max-w-[1400px] w-full mx-auto">
+      {/* ── Body ── */}
+      <div className="flex-1 px-8 py-8 w-full max-w-[1400px] mx-auto">
         {isAdmin ? (
-          // Admin: show each team member's work in separate cards
           <div className="space-y-6">
             {allMembersWork.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-8">No team members found in this project.</p>
+              <p className="py-8 text-center text-sm text-slate-400">No team members found in this project.</p>
             ) : (
               allMembersWork.map((mw) => (
                 <MemberWorkSection key={mw.member.id} memberWork={mw} />
@@ -318,10 +403,8 @@ function MyWorkContent({ data }: { data: MyWorkDto }) {
             )}
           </div>
         ) : (
-          // Regular user: show their own tasks
           <TaskSections
             currentSprintTasks={data.currentSprintTasks}
-            todayFocus={data.todayFocus}
             upcomingTasks={data.upcomingTasks}
           />
         )}
@@ -330,50 +413,54 @@ function MyWorkContent({ data }: { data: MyWorkDto }) {
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function MyWorkPage() {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-work', activeProjectId],
-    queryFn: () => getMyWork(activeProjectId!),
-    enabled: !!activeProjectId,
+    queryFn:  () => getMyWork(activeProjectId!),
+    enabled:  !!activeProjectId,
     staleTime: 30_000,
   });
 
   if (!activeProjectId) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center bg-slate-50/50 p-6 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-md border border-slate-200/60 mb-4 animate-bounce">
+        <div className="mb-4 flex h-16 w-16 animate-bounce items-center justify-center rounded-2xl border border-slate-200/60 bg-white shadow-md">
           <span className="text-2xl">📁</span>
         </div>
         <p className="text-base font-bold text-slate-800">No active project selected</p>
-        <p className="text-xs text-slate-400 mt-1 max-w-xs">Select a project in the sidebar switcher to view your work.</p>
+        <p className="mt-1 max-w-xs text-xs text-slate-400">Select a project in the sidebar switcher to view your work.</p>
       </div>
     );
   }
+
   if (isLoading) {
     return (
-      <div className="flex-1 px-6 py-6 space-y-8 animate-pulse overflow-y-auto bg-slate-50/50">
+      <div className="flex-1 animate-pulse space-y-8 overflow-y-auto bg-slate-50/50 px-6 py-6">
         <div className="space-y-2">
           <div className="h-6 w-1/4 rounded-md bg-slate-200" />
           <div className="h-4 w-1/3 rounded-md bg-slate-200" />
         </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-32 rounded-2xl bg-slate-200/80" />
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="h-36 rounded-xl bg-slate-200/80" />
           ))}
         </div>
       </div>
     );
   }
+
   if (isError || !data) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center bg-slate-50/50 p-6 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 border border-red-200 text-red-500 mb-4 shadow-sm">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-red-200 bg-red-50 text-red-500 shadow-sm">
           <span className="text-2xl">⚠️</span>
         </div>
         <p className="text-base font-bold text-slate-800">Failed to load your work</p>
-        <p className="text-xs text-slate-400 mt-1">Please try refreshing or choosing a different project.</p>
+        <p className="mt-1 text-xs text-slate-400">Please try refreshing or choosing a different project.</p>
       </div>
     );
   }
