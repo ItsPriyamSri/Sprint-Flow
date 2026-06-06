@@ -7,6 +7,7 @@ export function invalidateProjectScopedQueries(
 ) {
   void queryClient.invalidateQueries({ queryKey: ['workspace'] });
   void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+  void queryClient.invalidateQueries({ queryKey: ['board'] });
   if (projectId) {
     void queryClient.invalidateQueries({ queryKey: ['project-overview', projectId] });
     void queryClient.invalidateQueries({ queryKey: ['project-dashboard', projectId] });

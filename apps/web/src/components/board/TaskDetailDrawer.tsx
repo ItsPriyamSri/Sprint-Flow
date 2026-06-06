@@ -408,6 +408,8 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['backlog'] });
       queryClient.invalidateQueries({ queryKey: ['my-work'] });
       queryClient.invalidateQueries({ queryKey: ['workspace'] });
+      queryClient.invalidateQueries({ queryKey: ['board'] });
+      queryClient.invalidateQueries({ queryKey: ['project-epics'] });
       window.setTimeout(() => closeTask(), 550);
     },
     onError: (err: Error) => {
@@ -435,6 +437,8 @@ export function TaskDetailDrawer({ boardId, workspaceId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['backlog'] });
       queryClient.invalidateQueries({ queryKey: ['my-work'] });
       queryClient.invalidateQueries({ queryKey: ['workspace'] });
+      queryClient.invalidateQueries({ queryKey: ['board'] });
+      queryClient.invalidateQueries({ queryKey: ['project-epics'] });
       closeTask();
     },
   });

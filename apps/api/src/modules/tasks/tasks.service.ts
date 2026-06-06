@@ -169,6 +169,24 @@ export async function updateTask(
 ) {
   const old = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
 
+  const DONE_COL = /^(done|completed|finished)$/i;
+
+  // When done is toggled true and the caller isn't already specifying a column,
+  // automatically move the task into the board's Done column.
+  let autoColumnId: string | undefined;
+  let autoPosition: number | undefined;
+  if (input.done === true && !old.done && old.boardId && input.columnId === undefined) {
+    const cols = await prisma.boardColumn.findMany({
+      where: { boardId: old.boardId },
+      select: { id: true, name: true },
+    });
+    const doneCol = cols.find(c => DONE_COL.test(c.name.trim()));
+    if (doneCol && old.columnId !== doneCol.id) {
+      autoColumnId = doneCol.id;
+      autoPosition = await getLastPosition(doneCol.id);
+    }
+  }
+
   const updated = await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -186,6 +204,7 @@ export async function updateTask(
       ...(input.deferred !== undefined    && { deferred: input.deferred }),
       ...(input.deferredReason !== undefined && { deferredReason: input.deferredReason }),
       ...(input.projectId !== undefined   && { projectId: input.projectId }),
+      ...(autoColumnId !== undefined      && { columnId: autoColumnId, position: autoPosition }),
     },
   });
 
@@ -233,16 +252,31 @@ export async function moveTask(
     include: { column: { select: { name: true } } },
   });
 
+  const DONE_COL = /^(done|completed|finished)$/i;
+
   if (old.columnId !== move.columnId) {
     const oldCol = await prisma.boardColumn.findUnique({
       where: { id: old.columnId },
       select: { name: true },
     });
+
+    const destIsDone = DONE_COL.test(updated.column.name.trim());
+    const srcIsDone  = oldCol ? DONE_COL.test(oldCol.name.trim()) : false;
+
+    let doneAction: string = 'TASK_MOVED';
+    if (destIsDone && !old.done) {
+      await prisma.task.update({ where: { id: taskId }, data: { done: true } });
+      doneAction = 'TASK_DONE';
+    } else if (srcIsDone && !destIsDone && old.done) {
+      await prisma.task.update({ where: { id: taskId }, data: { done: false } });
+      doneAction = 'TASK_UPDATED';
+    }
+
     await prisma.activityLog.create({
       data: {
         workspaceId,
         actorId,
-        action: 'TASK_MOVED',
+        action: doneAction,
         entityType: 'task',
         entityId: taskId,
         diff: {

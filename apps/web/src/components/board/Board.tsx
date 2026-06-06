@@ -97,6 +97,7 @@ export function Board({ boardId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['backlog'] });
       queryClient.invalidateQueries({ queryKey: ['my-work'] });
       queryClient.invalidateQueries({ queryKey: ['workspace'] });
+      queryClient.invalidateQueries({ queryKey: ['project-epics'] });
     },
     onError: () => {
       queryClient.invalidateQueries({ queryKey: ['board', boardId] });

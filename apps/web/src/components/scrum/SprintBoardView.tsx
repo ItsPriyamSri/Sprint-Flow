@@ -1424,6 +1424,8 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
       void queryClient.invalidateQueries({ queryKey: ['backlog'] });
       void queryClient.invalidateQueries({ queryKey: ['my-work'] });
       void queryClient.invalidateQueries({ queryKey: ['workspace'] });
+      void queryClient.invalidateQueries({ queryKey: ['board'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-epics'] });
       onRefresh();
       if (activeTaskId === deletedTaskId) setActiveTaskId(null);
     },
@@ -1445,6 +1447,8 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
       void queryClient.invalidateQueries({ queryKey: ['backlog'] });
       void queryClient.invalidateQueries({ queryKey: ['my-work'] });
       void queryClient.invalidateQueries({ queryKey: ['workspace'] });
+      void queryClient.invalidateQueries({ queryKey: ['board'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-epics'] });
       onRefresh();
     },
   });

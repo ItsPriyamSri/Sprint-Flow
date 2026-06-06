@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useProjectStore } from '@/store/project.store';
+import { useAuthStore } from '@/store/auth.store';
 import { getProjectEpics } from '@/lib/api/projects';
+import { updateTask } from '@/lib/api/tasks';
 import { EpicFormModal } from '@/components/scrum/EpicFormModal';
 import type { EpicDto, EpicTaskItemDto, EpicWithTasksDto } from '@sprintflow/shared';
 
@@ -15,6 +17,22 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 function TaskRow({ task }: { task: EpicTaskItemDto }) {
+  const queryClient = useQueryClient();
+  const wsId = useAuthStore((s) => s.defaultWorkspaceId);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+
+  const doneMutation = useMutation({
+    mutationFn: (done: boolean) => updateTask(task.id, wsId!, { done }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project-epics', activeProjectId] });
+      void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['board'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-work'] });
+    },
+  });
+
   return (
     <tr className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
       <td className="px-4 py-2.5">
@@ -22,9 +40,9 @@ function TaskRow({ task }: { task: EpicTaskItemDto }) {
           <input
             type="checkbox"
             checked={task.done}
-            readOnly
-            className="h-3.5 w-3.5 rounded border-slate-300 accent-indigo-600"
-            aria-hidden
+            disabled={doneMutation.isPending}
+            onChange={(e) => doneMutation.mutate(e.target.checked)}
+            className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 accent-indigo-600 disabled:cursor-wait"
           />
           <span className={`truncate text-sm ${task.done ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
             {task.title}

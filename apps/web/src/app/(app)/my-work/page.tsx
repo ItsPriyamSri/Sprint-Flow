@@ -35,6 +35,11 @@ function TaskCard({ task }: { task: MyWorkTaskDto }) {
               {task.priority}
             </span>
           )}
+          {task.done && (
+            <span className="rounded-md bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[9px] font-extrabold text-emerald-600 uppercase tracking-wide">
+              ✓ Done
+            </span>
+          )}
           {task.blocked && (
             <span className="rounded-md bg-rose-50 border border-rose-100 px-2 py-0.5 text-[9px] font-extrabold text-rose-600 uppercase tracking-wide flex items-center gap-0.5 animate-pulse">
               <span>🚫</span> Blocked
