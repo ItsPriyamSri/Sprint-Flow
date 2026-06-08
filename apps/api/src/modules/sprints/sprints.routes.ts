@@ -174,6 +174,7 @@ sprintsRouter.get('/:sprintId/board', async (req: Request, res: Response, next: 
           projectMemberId: a.projectMemberId,
           memberName: a.projectMember.user.name,
           hours: Number(a.hours),
+          actualHours: a.actualHours != null ? Number(a.actualHours) : null,
         })),
         totalHours: t.assignments.reduce((sum, a) => sum + Number(a.hours), 0),
         position: t.position,

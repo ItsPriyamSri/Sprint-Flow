@@ -62,11 +62,12 @@ function OwnerChips({
   const [activeChipId, setActiveChipId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [hoursInput, setHoursInput] = useState('');
+  const [actualHoursInput, setActualHoursInput] = useState('');
   const queryClient = useQueryClient();
 
   const assignMutation = useMutation({
-    mutationFn: ({ memberId, hours }: { memberId: string; hours: number }) =>
-      upsertAssignment(taskId, workspaceId, memberId, hours),
+    mutationFn: ({ memberId, hours, actualHours }: { memberId: string; hours: number; actualHours?: number | null }) =>
+      upsertAssignment(taskId, workspaceId, memberId, hours, actualHours),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
       void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
@@ -108,6 +109,7 @@ function OwnerChips({
                 } else {
                   setActiveChipId(a.id);
                   setHoursInput(a.hours.toString());
+                  setActualHoursInput(a.actualHours != null ? a.actualHours.toString() : '');
                   setShowAdd(false);
                 }
               }}
@@ -116,7 +118,7 @@ function OwnerChips({
               <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-indigo-200 text-[7px] font-bold text-indigo-700">
                 {a.memberName.slice(0, 2).toUpperCase()}
               </span>
-              {a.hours}h
+              {a.hours}h{a.actualHours != null ? <span className="text-emerald-600">/{a.actualHours}a</span> : null}
             </button>
 
             {isEditing && (
@@ -138,39 +140,54 @@ function OwnerChips({
                 
                 <div className="space-y-2">
                   <div>
-                    <label className="block text-[10px] font-medium text-slate-400">Committed Hours</label>
-                    <div className="mt-1 flex items-center gap-1">
-                      <input
-                        type="number"
-                        value={hoursInput}
-                        onChange={(e) => setHoursInput(e.target.value)}
-                        className="w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
-                        min="0.5"
-                        max="200"
-                        step="0.5"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const h = parseFloat(hoursInput);
-                            if (!isNaN(h) && h > 0) {
-                              assignMutation.mutate({ memberId: a.projectMemberId, hours: h });
-                            }
-                          }
-                        }}
-                      />
-                      <button
-                        onClick={() => {
+                    <label className="block text-[10px] font-medium text-slate-400">Planned Hours</label>
+                    <input
+                      type="number"
+                      value={hoursInput}
+                      onChange={(e) => setHoursInput(e.target.value)}
+                      className="mt-1 w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
+                      min="0.5"
+                      max="200"
+                      step="0.5"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-medium text-slate-400">Actual Hours</label>
+                    <input
+                      type="number"
+                      value={actualHoursInput}
+                      onChange={(e) => setActualHoursInput(e.target.value)}
+                      placeholder="—"
+                      className="mt-1 w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-emerald-400 focus:outline-none"
+                      min="0"
+                      max="200"
+                      step="0.5"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
                           const h = parseFloat(hoursInput);
                           if (!isNaN(h) && h > 0) {
-                            assignMutation.mutate({ memberId: a.projectMemberId, hours: h });
+                            const actual = actualHoursInput !== '' ? parseFloat(actualHoursInput) : undefined;
+                            assignMutation.mutate({ memberId: a.projectMemberId, hours: h, actualHours: !isNaN(actual!) ? actual : undefined });
                           }
-                        }}
-                        className="rounded bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700"
-                      >
-                        Save
-                      </button>
-                    </div>
+                        }
+                      }}
+                    />
                   </div>
+
+                  <button
+                    onClick={() => {
+                      const h = parseFloat(hoursInput);
+                      if (!isNaN(h) && h > 0) {
+                        const actual = actualHoursInput !== '' ? parseFloat(actualHoursInput) : undefined;
+                        assignMutation.mutate({ memberId: a.projectMemberId, hours: h, actualHours: !isNaN(actual!) ? actual : undefined });
+                      }
+                    }}
+                    className="w-full rounded bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700"
+                  >
+                    Save
+                  </button>
 
                   <div className="flex items-center justify-between pt-1 border-t border-slate-100 mt-2">
                     <button

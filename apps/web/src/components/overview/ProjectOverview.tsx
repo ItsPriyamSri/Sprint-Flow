@@ -49,6 +49,66 @@ function BufferBar({ planned, budget }: { planned: number; budget: number }) {
   );
 }
 
+function EstimationPerformance({ sh }: { sh: SprintHealthDto }) {
+  const hasActuals = sh.actualsLoggedCount > 0;
+  const notLogged = sh.actualsExpectedCount - sh.actualsLoggedCount;
+
+  const effColor =
+    sh.efficiencyPct == null ? ''
+    : sh.efficiencyPct >= 100 ? 'text-emerald-600'
+    : sh.efficiencyPct >= 80  ? 'text-amber-600'
+    : 'text-rose-600';
+
+  const varianceSign = sh.varianceHours != null && sh.varianceHours >= 0 ? '+' : '';
+
+  return (
+    <div className="mt-4 border-t border-slate-50 pt-3">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+        Estimation Performance
+      </span>
+
+      {!hasActuals ? (
+        <p className="text-[10px] text-slate-400 italic">
+          {sh.actualsExpectedCount > 0
+            ? `No actuals logged yet — ${sh.actualsExpectedCount} assignment${sh.actualsExpectedCount > 1 ? 's' : ''} pending`
+            : 'No completed assignments to track'}
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-500">Actual / Planned</span>
+            <span className="text-[10px] font-semibold text-slate-700">
+              {sh.actualHours}h / {sh.plannedHoursDone}h
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-500">Variance</span>
+            <span className={`text-[10px] font-semibold ${sh.varianceHours != null && sh.varianceHours >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {sh.varianceHours != null
+                ? `${varianceSign}${sh.varianceHours.toFixed(1)}h (${varianceSign}${sh.variancePct?.toFixed(1)}%)`
+                : '—'}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-500">Efficiency</span>
+            <span className={`text-[10px] font-bold ${effColor}`}>
+              {sh.efficiencyPct != null ? `${Math.round(sh.efficiencyPct)}%` : '—'}
+            </span>
+          </div>
+
+          {notLogged > 0 && (
+            <div className="mt-1 rounded bg-amber-50 border border-amber-100 px-2 py-1 text-[9px] font-medium text-amber-700">
+              {notLogged} assignment{notLogged > 1 ? 's' : ''} not yet logged
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SprintCard({
   sh,
   workspaceId,
@@ -159,6 +219,9 @@ function SprintCard({
             </span>
           )}
         </div>
+
+        {/* Estimation Performance */}
+        <EstimationPerformance sh={sh} />
       </div>
 
       {/* Quick Action Links */}

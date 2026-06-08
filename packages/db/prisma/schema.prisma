@@ -201,10 +201,11 @@ model ProjectMember {
 }
 
 model TaskAssignment {
-  id              String  @id @default(cuid())
+  id              String   @id @default(cuid())
   taskId          String
   projectMemberId String
-  hours           Decimal @default(0) @db.Decimal(8, 2)
+  hours           Decimal  @default(0) @db.Decimal(8, 2)
+  actualHours     Decimal? @db.Decimal(8, 2)
 
   task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
   projectMember ProjectMember @relation(fields: [projectMemberId], references: [id], onDelete: Cascade)

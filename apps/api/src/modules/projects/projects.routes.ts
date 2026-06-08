@@ -140,7 +140,7 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
       where: { sprintId: { in: allSprintIds } },
       select: {
         id: true, sprintId: true, priority: true, done: true, blocked: true, updatedAt: true,
-        assignments: { select: { projectMemberId: true, hours: true } },
+        assignments: { select: { projectMemberId: true, hours: true, actualHours: true } },
         column: { select: { key: true } },
       },
     });
@@ -185,6 +185,23 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
       const todoTasks = sprintTasks.filter((t) => !t.done && !t.blocked && (t.column?.key === 'todo' || t.column?.key === 'backlog')).length;
       const inProgressTasks = sprintTasks.filter((t) => !t.done && !t.blocked && (t.column?.key === 'in_progress' || t.column?.key === 'review')).length;
 
+      // Estimation performance: done tasks only, assignments with actuals logged
+      const doneTasks = sprintTasks.filter((t) => t.done);
+      const doneAssignmentsWithActuals = doneTasks.flatMap((t) =>
+        t.assignments.filter((a) => a.actualHours != null),
+      );
+      const actualsExpectedCount = doneTasks.reduce(
+        (s, t) => s + t.assignments.filter((a) => Number(a.hours) > 0).length, 0,
+      );
+      const actualsLoggedCount = doneAssignmentsWithActuals.length;
+      const sumPlannedDone = doneAssignmentsWithActuals.reduce((s, a) => s + Number(a.hours), 0);
+      const sumActualDone = doneAssignmentsWithActuals.reduce((s, a) => s + Number(a.actualHours), 0);
+      const varianceHours = actualsLoggedCount > 0 ? sumPlannedDone - sumActualDone : null;
+      const variancePct = actualsLoggedCount > 0 && sumPlannedDone > 0
+        ? ((sumPlannedDone - sumActualDone) / sumPlannedDone) * 100 : null;
+      const efficiencyPct = actualsLoggedCount > 0 && sumActualDone > 0
+        ? (sumPlannedDone / sumActualDone) * 100 : null;
+
       return {
         sprint: sprintDto(sprint),
         budgetHours: budget,
@@ -196,6 +213,13 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
         todoTasks,
         inProgressTasks,
         memberWorkload,
+        actualHours: sumActualDone,
+        plannedHoursDone: sumPlannedDone,
+        varianceHours,
+        variancePct,
+        efficiencyPct,
+        actualsLoggedCount,
+        actualsExpectedCount,
       };
     });
 
@@ -742,6 +766,7 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
           projectMemberId: x.projectMemberId,
           memberName: x.projectMember.user.name,
           hours: Number(x.hours),
+          actualHours: x.actualHours != null ? Number(x.actualHours) : null,
         })),
         totalHours,
         position: t.position,
@@ -927,6 +952,7 @@ projectsRouter.get('/:projectId/backlog', async (req: Request, res: Response, ne
           projectMemberId: a.projectMemberId,
           memberName: a.projectMember.user.name,
           hours: Number(a.hours),
+          actualHours: a.actualHours != null ? Number(a.actualHours) : null,
         })),
         totalHours,
         position: t.position,

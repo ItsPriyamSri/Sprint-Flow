@@ -1,9 +1,24 @@
 # SprintFlow — Build Progress & Handoff
 
-**Last updated:** 2026-06-06  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)**  
-**Status:** Full Scrum platform through Phase 13 — task state fully syncs across all views, My Work redesigned, Activity feed persistent and live. See AI_ROADMAP.md for AI work.  
+**Last updated:** 2026-06-08  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)** · **14 (Sprint Actual Hours, Variance & Efficiency)**  
+**Status:** Full Scrum platform through Phase 14 — actual hours tracking, variance and efficiency metrics on the Overview page. See AI_ROADMAP.md for AI work.  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+---
+
+## Phase 14 — Sprint Actual Hours, Variance & Efficiency (2026-06-08)
+
+| Area | What's implemented |
+|---|---|
+| **DB schema** | `actualHours Decimal?` added to `TaskAssignment` (migration `20260608052738_add_task_assignment_actual_hours`). Planned hours remain on `hours`; actuals on the new field. |
+| **API: upsert assignment** | `PUT /tasks/:taskId/assignments/:projectMemberId` now accepts optional `actualHours`. Backend service writes both planned and actual in one upsert. |
+| **API: overview aggregates** | `GET /projects/:projectId` now computes per-sprint `actualHours`, `plannedHoursDone`, `varianceHours`, `variancePct`, `efficiencyPct`, `actualsLoggedCount`, `actualsExpectedCount` — restricted to done tasks with logged actuals only. |
+| **Shared types** | `TaskAssignmentDto.actualHours: number \| null` and new fields on `SprintHealthDto`. |
+| **Sprint board owner chips** | Chip label now shows `Xh/Ya` when actuals logged. Edit popover has separate Planned and Actual inputs. |
+| **Scrum task drawer** | Assignments section now shows dual Planned / Actual columns per member with green-tinted actual input. |
+| **Overview — Estimation Performance** | New `EstimationPerformance` sub-component inside each `SprintCard`: shows Actual/Planned hours, variance (±h and %), efficiency %, and an amber badge when some assignments are not yet logged. Color-coded: emerald ≥ 100%, amber 80–99%, rose < 80%. |
+| **All serializers** | `actualHours` included in sprint board, flow board, backlog, and my-work assignment serialization. |
 
 ---
 

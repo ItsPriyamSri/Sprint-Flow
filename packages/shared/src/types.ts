@@ -74,6 +74,14 @@ export interface SprintHealthDto {
   todoTasks: number;
   inProgressTasks: number;
   memberWorkload: MemberWorkloadDto[];
+  // Actual hours & estimation performance (done tasks only)
+  actualHours: number;
+  plannedHoursDone: number; // Σ planned on done tasks that have actuals logged
+  varianceHours: number | null; // null if no actuals logged
+  variancePct: number | null;
+  efficiencyPct: number | null;
+  actualsLoggedCount: number; // assignments with actualHours on done tasks
+  actualsExpectedCount: number; // assignments on done tasks with planned > 0
 }
 
 export interface MemberWorkloadDto {
@@ -110,6 +118,7 @@ export interface TaskAssignmentDto {
   projectMemberId: string;
   memberName: string;
   hours: number;
+  actualHours: number | null;
 }
 
 export interface TaskDto {

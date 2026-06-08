@@ -135,15 +135,20 @@ tasksRouter.delete('/:taskId', async (req: Request, res: Response, next: NextFun
 // ── Upsert assignment ────────────────────────────────────────────────────────
 tasksRouter.put(
   '/:taskId/assignments/:projectMemberId',
-  validate(z.object({ hours: z.number().min(0).max(1000) })),
+  validate(z.object({
+    hours: z.number().min(0).max(1000),
+    actualHours: z.number().min(0).max(1000).nullable().optional(),
+  })),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const body = req.body as { hours: number; actualHours?: number | null };
       const assignment = await svc.upsertAssignment(
         paramStr(req, 'taskId'),
         wsId(req),
         req.user!.id,
         paramStr(req, 'projectMemberId'),
-        (req.body as { hours: number }).hours,
+        body.hours,
+        body.actualHours,
       );
       res.json(assignment);
     } catch (e) { next(e); }
