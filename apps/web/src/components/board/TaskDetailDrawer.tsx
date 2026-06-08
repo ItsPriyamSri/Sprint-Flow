@@ -153,10 +153,11 @@ function AssignmentsEditor({
   const [addingHours, setAddingHours] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editHours, setEditHours] = useState('');
+  const [editActualHours, setEditActualHours] = useState('');
 
   const upsertMut = useMutation({
-    mutationFn: ({ memberId, hours }: { memberId: string; hours: number }) =>
-      upsertAssignment(taskId, wsId, memberId, hours),
+    mutationFn: ({ memberId, hours, actualHours }: { memberId: string; hours: number; actualHours?: number | null }) =>
+      upsertAssignment(taskId, wsId, memberId, hours, actualHours),
     onSuccess: () => {
       setAddingMemberId('');
       setAddingHours('');
@@ -178,54 +179,82 @@ function AssignmentsEditor({
       <label className="block text-xs font-medium text-slate-500">Assignments</label>
       <div className="mt-1 space-y-1.5">
         {task.assignments.map((a) => (
-          <div key={a.id} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs">
-            <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
-              {a.memberName.slice(0, 2).toUpperCase()}
+          <div key={a.id} className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
+                {a.memberName.slice(0, 2).toUpperCase()}
+              </div>
+              <span className="flex-1 font-medium text-slate-700">{a.memberName}</span>
+              {editingId === a.projectMemberId ? (
+                <>
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-slate-400">Plan</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={editHours}
+                        onChange={(e) => setEditHours(e.target.value)}
+                        className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs focus:border-indigo-400 focus:outline-none"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-emerald-500">Act</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={editActualHours}
+                        onChange={(e) => setEditActualHours(e.target.value)}
+                        placeholder="—"
+                        className="w-14 rounded border border-emerald-200 px-1 py-0.5 text-right text-xs focus:border-emerald-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const h = parseFloat(editHours);
+                      const actual = editActualHours !== '' ? parseFloat(editActualHours) : undefined;
+                      if (!isNaN(h) && h >= 0) {
+                        upsertMut.mutate({ memberId: a.projectMemberId, hours: h, actualHours: actual !== undefined && !isNaN(actual) ? actual : undefined });
+                      }
+                    }}
+                    disabled={upsertMut.isPending}
+                    className="rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                  <button onClick={() => setEditingId(null)} className="text-[10px] text-slate-400 hover:text-slate-600">✕</button>
+                </>
+              ) : (
+                <>
+                  <span className="font-mono text-slate-500">
+                    {a.hours}h{a.actualHours != null ? <span className="text-emerald-600"> / {a.actualHours}a</span> : null}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setEditingId(a.projectMemberId);
+                      setEditHours(String(a.hours));
+                      setEditActualHours(a.actualHours != null ? String(a.actualHours) : '');
+                    }}
+                    className="ml-1 text-[10px] text-slate-400 hover:text-indigo-600"
+                    title="Edit hours"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    onClick={() => removeMut.mutate(a.projectMemberId)}
+                    disabled={removeMut.isPending}
+                    className="text-[10px] text-slate-400 hover:text-red-500 disabled:opacity-50"
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </>
+              )}
             </div>
-            <span className="flex-1 font-medium text-slate-700">{a.memberName}</span>
-            {editingId === a.projectMemberId ? (
-              <>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={editHours}
-                  onChange={(e) => setEditHours(e.target.value)}
-                  className="w-14 rounded border border-slate-200 px-1 py-0.5 text-right text-xs focus:border-indigo-400 focus:outline-none"
-                  autoFocus
-                />
-                <button
-                  onClick={() => {
-                    const h = parseFloat(editHours);
-                    if (!isNaN(h) && h >= 0) upsertMut.mutate({ memberId: a.projectMemberId, hours: h });
-                  }}
-                  disabled={upsertMut.isPending}
-                  className="rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  Save
-                </button>
-                <button onClick={() => setEditingId(null)} className="text-[10px] text-slate-400 hover:text-slate-600">✕</button>
-              </>
-            ) : (
-              <>
-                <span className="font-mono text-slate-500">{a.hours}h</span>
-                <button
-                  onClick={() => { setEditingId(a.projectMemberId); setEditHours(String(a.hours)); }}
-                  className="ml-1 text-[10px] text-slate-400 hover:text-indigo-600"
-                  title="Edit hours"
-                >
-                  ✎
-                </button>
-                <button
-                  onClick={() => removeMut.mutate(a.projectMemberId)}
-                  disabled={removeMut.isPending}
-                  className="text-[10px] text-slate-400 hover:text-red-500 disabled:opacity-50"
-                  title="Remove"
-                >
-                  ✕
-                </button>
-              </>
-            )}
           </div>
         ))}
 

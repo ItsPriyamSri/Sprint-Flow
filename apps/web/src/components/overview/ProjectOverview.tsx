@@ -253,6 +253,19 @@ export function ProjectOverview({ data }: Props) {
   const totalBudget  = allSprints.reduce((s, sh) => s + sh.budgetHours, 0);
   const currentBuffer = currentSprint?.bufferHours ?? null;
 
+  // Rolling efficiency: last 3 completed sprints with actuals logged
+  const completedWithActuals = allSprints
+    .filter((sh) => sh.sprint.status === 'COMPLETED' && sh.efficiencyPct != null)
+    .slice(-3);
+  const rollingEfficiency = completedWithActuals.length > 0
+    ? Math.round(completedWithActuals.reduce((s, sh) => s + sh.efficiencyPct!, 0) / completedWithActuals.length)
+    : null;
+
+  // Current sprint efficiency (if actuals logged)
+  const activeEfficiency = currentSprint?.efficiencyPct != null
+    ? Math.round(currentSprint.efficiencyPct)
+    : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {/* Header */}
@@ -263,7 +276,7 @@ export function ProjectOverview({ data }: Props) {
 
       <div className="flex-1 px-6 py-6 space-y-8">
         {/* Metric cards */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <MetricCard
             label="Planned vs Budget"
             value={`${totalPlanned}h`}
@@ -280,6 +293,17 @@ export function ProjectOverview({ data }: Props) {
             label="Done this week"
             value={tasksCompletedThisWeek}
             sub="tasks completed"
+          />
+          <MetricCard
+            label="Sprint Efficiency"
+            value={activeEfficiency !== null ? `${activeEfficiency}%` : '—'}
+            sub={activeEfficiency !== null ? 'current sprint' : 'No actuals logged'}
+            accent={
+              activeEfficiency === null ? 'text-slate-400'
+              : activeEfficiency >= 100 ? 'text-emerald-600'
+              : activeEfficiency >= 80  ? 'text-amber-600'
+              : 'text-rose-600'
+            }
           />
           <MetricCard
             label="Days to release"
