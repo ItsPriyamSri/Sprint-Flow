@@ -42,3 +42,26 @@ export async function updateSprint(
 export async function deleteSprint(sprintId: string, workspaceId: string): Promise<void> {
   return apiFetch(`/sprints/${sprintId}?workspaceId=${workspaceId}`, { method: 'DELETE' });
 }
+
+export async function upsertSprintActual(
+  sprintId: string,
+  workspaceId: string,
+  projectMemberId: string,
+  actualHours: number,
+) {
+  return apiFetch<{ projectMemberId: string; actualHours: number }>(
+    `/sprints/${sprintId}/actuals/${projectMemberId}?workspaceId=${workspaceId}`,
+    { method: 'PUT', body: JSON.stringify({ actualHours }) },
+  );
+}
+
+export async function deleteSprintActual(
+  sprintId: string,
+  workspaceId: string,
+  projectMemberId: string,
+) {
+  return apiFetch<void>(
+    `/sprints/${sprintId}/actuals/${projectMemberId}?workspaceId=${workspaceId}`,
+    { method: 'DELETE' },
+  );
+}

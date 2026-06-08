@@ -192,26 +192,39 @@ model ProjectMember {
   hoursPerDay Float       @default(6) // capacity: hrs/day this person works
   joinedAt    DateTime    @default(now())
 
-  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignments TaskAssignment[]
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments   TaskAssignment[]
+  sprintActuals SprintMemberActual[]
 
   @@unique([projectId, userId])
   @@index([projectId])
 }
 
 model TaskAssignment {
-  id              String   @id @default(cuid())
+  id              String  @id @default(cuid())
   taskId          String
   projectMemberId String
-  hours           Decimal  @default(0) @db.Decimal(8, 2)
-  actualHours     Decimal? @db.Decimal(8, 2)
+  hours           Decimal @default(0) @db.Decimal(8, 2)
 
   task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
   projectMember ProjectMember @relation(fields: [projectMemberId], references: [id], onDelete: Cascade)
 
   @@unique([taskId, projectMemberId])
   @@index([taskId])
+}
+
+model SprintMemberActual {
+  id              String  @id @default(cuid())
+  sprintId        String
+  projectMemberId String
+  actualHours     Decimal @db.Decimal(8, 2)
+
+  sprint        Sprint        @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  projectMember ProjectMember @relation(fields: [projectMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([sprintId, projectMemberId])
+  @@index([sprintId])
 }
 
 // ─── Boards & Columns ────────────────────────────────────────────────────────
@@ -263,9 +276,10 @@ model Sprint {
   position         Float        @default(0)
   createdAt        DateTime     @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  tasks     Task[]
+  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  tasks         Task[]
+  memberActuals SprintMemberActual[]
 
   @@index([workspaceId])
   @@index([projectId])

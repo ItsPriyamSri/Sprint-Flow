@@ -86,7 +86,6 @@ boardsRouter.get('/:boardId', async (req, res, next) => {
             projectMemberId: a.projectMemberId,
             memberName: a.projectMember.user.name,
             hours: Number(a.hours),
-            actualHours: a.actualHours != null ? Number(a.actualHours) : null,
           })),
           position: t.position,
           createdAt: t.createdAt.toISOString(),

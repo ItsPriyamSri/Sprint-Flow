@@ -12,7 +12,9 @@ export default function OverviewPage() {
     queryKey: ['project-overview', activeProjectId],
     queryFn: () => getProject(activeProjectId!),
     enabled: !!activeProjectId,
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   if (!activeProjectId) {

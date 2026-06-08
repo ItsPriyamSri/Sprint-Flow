@@ -223,8 +223,8 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
   });
 
   const assignMutation = useMutation({
-    mutationFn: ({ memberId, hours, actualHours }: { memberId: string; hours: number; actualHours?: number | null }) =>
-      upsertAssignment(taskId, workspaceId, memberId, hours, actualHours),
+    mutationFn: ({ memberId, hours }: { memberId: string; hours: number }) =>
+      upsertAssignment(taskId, workspaceId, memberId, hours),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['task', taskId, workspaceId] });
       onSaved();
@@ -332,13 +332,7 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
 
               {/* Assignments */}
               <div>
-                <div className="flex items-center justify-between">
-                  <label className={labelCls}>Assignments</label>
-                  <div className="flex gap-4 text-[10px] font-medium text-slate-400 pr-1">
-                    <span>Planned</span>
-                    <span>Actual</span>
-                  </div>
-                </div>
+                <label className={labelCls}>Assignments</label>
                 <div className="mt-1.5 space-y-2">
                   {members.map((m) => {
                     const existing = task?.assignments.find((a) => a.projectMemberId === m.id);
@@ -357,37 +351,16 @@ export function ScrumTaskDrawer({ taskId, workspaceId, members, epics, onClose, 
                           max="200"
                           step="0.5"
                           defaultValue={existing?.hours ?? ''}
-                          placeholder="0"
+                          placeholder="0h"
                           onBlur={(e) => {
                             const h = parseFloat(e.target.value);
-                            const actualInput = e.currentTarget.closest('div')?.querySelector<HTMLInputElement>('[data-actual]');
-                            const actual = actualInput ? parseFloat(actualInput.value) : NaN;
                             if (!isNaN(h) && h > 0) {
-                              assignMutation.mutate({ memberId: m.id, hours: h, actualHours: !isNaN(actual) ? actual : existing?.actualHours ?? undefined });
+                              assignMutation.mutate({ memberId: m.id, hours: h });
                             } else if (existing && (e.target.value === '' || h === 0)) {
                               removeAssignMutation.mutate(m.id);
                             }
                           }}
-                          className="w-14 rounded border border-slate-200 px-2 py-1 text-right text-sm focus:border-indigo-400 focus:outline-none"
-                        />
-                        <input
-                          data-actual=""
-                          type="number"
-                          min="0"
-                          max="200"
-                          step="0.5"
-                          defaultValue={existing?.actualHours ?? ''}
-                          placeholder="—"
-                          onBlur={(e) => {
-                            const actual = parseFloat(e.target.value);
-                            const plannedInput = e.currentTarget.closest('div')?.querySelector<HTMLInputElement>(':not([data-actual])[type="number"]');
-                            const h = plannedInput ? parseFloat(plannedInput.value) : NaN;
-                            const effectiveH = !isNaN(h) && h > 0 ? h : existing?.hours;
-                            if (effectiveH && effectiveH > 0) {
-                              assignMutation.mutate({ memberId: m.id, hours: effectiveH, actualHours: !isNaN(actual) ? actual : null });
-                            }
-                          }}
-                          className="w-14 rounded border border-emerald-200 px-2 py-1 text-right text-sm focus:border-emerald-400 focus:outline-none"
+                          className="w-16 rounded border border-slate-200 px-2 py-1 text-right text-sm focus:border-indigo-400 focus:outline-none"
                         />
                         <span className="text-xs text-slate-400">hrs</span>
                       </div>

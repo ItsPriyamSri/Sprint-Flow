@@ -7,7 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { confirmDeleteSprint } from '@/lib/deleteActions';
 import type { SprintBoardDto, SprintTaskDto, EpicDto, SprintDto } from '@sprintflow/shared';
 import { deleteTask, updateTask, upsertAssignment, removeAssignment } from '@/lib/api/tasks';
-import { updateSprint } from '@/lib/api/sprints';
+import { updateSprint, upsertSprintActual, deleteSprintActual } from '@/lib/api/sprints';
 import { updateEpic, updateProjectMember } from '@/lib/api/projects';
 import { ScrumTaskDrawer } from './ScrumTaskDrawer';
 import { InlineAddTask } from './InlineAddTask';
@@ -62,12 +62,11 @@ function OwnerChips({
   const [activeChipId, setActiveChipId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [hoursInput, setHoursInput] = useState('');
-  const [actualHoursInput, setActualHoursInput] = useState('');
   const queryClient = useQueryClient();
 
   const assignMutation = useMutation({
-    mutationFn: ({ memberId, hours, actualHours }: { memberId: string; hours: number; actualHours?: number | null }) =>
-      upsertAssignment(taskId, workspaceId, memberId, hours, actualHours),
+    mutationFn: ({ memberId, hours }: { memberId: string; hours: number }) =>
+      upsertAssignment(taskId, workspaceId, memberId, hours),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
       void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
@@ -109,7 +108,6 @@ function OwnerChips({
                 } else {
                   setActiveChipId(a.id);
                   setHoursInput(a.hours.toString());
-                  setActualHoursInput(a.actualHours != null ? a.actualHours.toString() : '');
                   setShowAdd(false);
                 }
               }}
@@ -118,7 +116,7 @@ function OwnerChips({
               <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-indigo-200 text-[7px] font-bold text-indigo-700">
                 {a.memberName.slice(0, 2).toUpperCase()}
               </span>
-              {a.hours}h{a.actualHours != null ? <span className="text-emerald-600">/{a.actualHours}a</span> : null}
+              {a.hours}h
             </button>
 
             {isEditing && (
@@ -140,54 +138,35 @@ function OwnerChips({
                 
                 <div className="space-y-2">
                   <div>
-                    <label className="block text-[10px] font-medium text-slate-400">Planned Hours</label>
-                    <input
-                      type="number"
-                      value={hoursInput}
-                      onChange={(e) => setHoursInput(e.target.value)}
-                      className="mt-1 w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
-                      min="0.5"
-                      max="200"
-                      step="0.5"
-                      autoFocus
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-medium text-slate-400">Actual Hours</label>
-                    <input
-                      type="number"
-                      value={actualHoursInput}
-                      onChange={(e) => setActualHoursInput(e.target.value)}
-                      placeholder="—"
-                      className="mt-1 w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-emerald-400 focus:outline-none"
-                      min="0"
-                      max="200"
-                      step="0.5"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          const h = parseFloat(hoursInput);
-                          if (!isNaN(h) && h > 0) {
-                            const actual = actualHoursInput !== '' ? parseFloat(actualHoursInput) : undefined;
-                            assignMutation.mutate({ memberId: a.projectMemberId, hours: h, actualHours: !isNaN(actual!) ? actual : undefined });
+                    <label className="block text-[10px] font-medium text-slate-400">Committed Hours</label>
+                    <div className="mt-1 flex items-center gap-1">
+                      <input
+                        type="number"
+                        value={hoursInput}
+                        onChange={(e) => setHoursInput(e.target.value)}
+                        className="w-full rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
+                        min="0.5"
+                        max="200"
+                        step="0.5"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const h = parseFloat(hoursInput);
+                            if (!isNaN(h) && h > 0) assignMutation.mutate({ memberId: a.projectMemberId, hours: h });
                           }
-                        }
-                      }}
-                    />
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          const h = parseFloat(hoursInput);
+                          if (!isNaN(h) && h > 0) assignMutation.mutate({ memberId: a.projectMemberId, hours: h });
+                        }}
+                        className="rounded bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700"
+                      >
+                        Save
+                      </button>
+                    </div>
                   </div>
-
-                  <button
-                    onClick={() => {
-                      const h = parseFloat(hoursInput);
-                      if (!isNaN(h) && h > 0) {
-                        const actual = actualHoursInput !== '' ? parseFloat(actualHoursInput) : undefined;
-                        assignMutation.mutate({ memberId: a.projectMemberId, hours: h, actualHours: !isNaN(actual!) ? actual : undefined });
-                      }
-                    }}
-                    className="w-full rounded bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700"
-                  >
-                    Save
-                  </button>
 
                   <div className="flex items-center justify-between pt-1 border-t border-slate-100 mt-2">
                     <button
@@ -522,9 +501,187 @@ function EpicHeaderEdit({
   );
 }
 
+// ── Sprint Actuals Panel ────────────────────────────────────────────────────
+function SprintActualsPanel({
+  sprintId,
+  workspaceId,
+  memberWorkload,
+  memberActuals,
+  onSaved,
+}: {
+  sprintId: string;
+  workspaceId: string;
+  memberWorkload: SprintBoardDto['memberWorkload'];
+  memberActuals: SprintBoardDto['memberActuals'];
+  onSaved: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [inputs, setInputs] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    memberActuals.forEach((a) => { init[a.projectMemberId] = a.actualHours.toString(); });
+    return init;
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+
+  // When memberActuals prop updates after a refetch, sync inputs to the saved state
+  const actualsKeyRef = useRef('');
+  const actualsKey = memberActuals.map((a) => `${a.projectMemberId}:${a.actualHours}`).join(',');
+  useEffect(() => {
+    if (actualsKey !== actualsKeyRef.current) {
+      actualsKeyRef.current = actualsKey;
+      setInputs((prev) => {
+        const next = { ...prev };
+        memberActuals.forEach((a) => { next[a.projectMemberId] = a.actualHours.toString(); });
+        return next;
+      });
+    }
+  }, [actualsKey, memberActuals]);
+
+  const totalPlanned = memberWorkload.reduce((s, m) => s + m.committedHours, 0);
+
+  // Derive preview metrics from current input values (not yet-saved state)
+  const filledMembers = memberWorkload.filter((mw) => {
+    const v = parseFloat(inputs[mw.member.id] ?? '');
+    return !isNaN(v) && v >= 0 && (inputs[mw.member.id] ?? '') !== '';
+  });
+  const inputTotal = filledMembers.reduce((s, mw) => {
+    return s + parseFloat(inputs[mw.member.id] ?? '0');
+  }, 0);
+  const inputEfficiencyPct = inputTotal > 0 && filledMembers.length > 0
+    ? Math.round((filledMembers.reduce((s, mw) => s + mw.committedHours, 0) / inputTotal) * 100)
+    : null;
+
+  // True when any input differs from the last saved memberActuals value
+  const isDirty = memberWorkload.some((mw) => {
+    const inputVal = inputs[mw.member.id] ?? '';
+    const existing = memberActuals.find((a) => a.projectMemberId === mw.member.id);
+    const savedVal = existing ? existing.actualHours.toString() : '';
+    return inputVal !== savedVal;
+  });
+
+  const handleSaveAll = async () => {
+    setIsSaving(true);
+    try {
+      const ops: Promise<unknown>[] = [];
+      memberWorkload.forEach((mw) => {
+        const val = inputs[mw.member.id] ?? '';
+        const h = parseFloat(val);
+        const existing = memberActuals.find((a) => a.projectMemberId === mw.member.id);
+        if (!isNaN(h) && h >= 0 && val !== '') {
+          ops.push(upsertSprintActual(sprintId, workspaceId, mw.member.id, h));
+        } else if (existing && val === '') {
+          ops.push(deleteSprintActual(sprintId, workspaceId, mw.member.id));
+        }
+      });
+      await Promise.all(ops);
+      void queryClient.invalidateQueries({ queryKey: ['sprint-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['project-overview'] });
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2500);
+      onSaved();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const canSave = !isSaving && (isDirty || filledMembers.length > 0);
+
+  return (
+    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 overflow-hidden">
+      <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Log Sprint Actuals</span>
+        <span className="text-[10px] text-slate-400">{memberActuals.length}/{memberWorkload.length} saved</span>
+      </div>
+
+      <div className="divide-y divide-slate-100">
+        {memberWorkload.map((mw) => {
+          const existing = memberActuals.find((a) => a.projectMemberId === mw.member.id);
+          const val = inputs[mw.member.id] ?? '';
+          const inputVal = parseFloat(val);
+          const isSaved = !!existing && val === existing.actualHours.toString();
+          const isModified = !isSaved && val !== '';
+
+          return (
+            <div key={mw.member.id} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-700">
+                {mw.member.name.slice(0, 2).toUpperCase()}
+              </div>
+              <span className="flex-1 text-xs font-medium text-slate-700">{mw.member.name}</span>
+              <span className="text-[10px] text-slate-400 w-14 text-right">{mw.committedHours}h plan</span>
+              <input
+                type="number"
+                value={val}
+                onChange={(e) => setInputs((p) => ({ ...p, [mw.member.id]: e.target.value }))}
+                placeholder="—"
+                min="0"
+                max="10000"
+                step="0.5"
+                className={`w-16 rounded border px-2 py-1 text-right text-xs focus:outline-none transition-colors ${
+                  isSaved    ? 'border-emerald-300 bg-emerald-50 focus:border-emerald-500'
+                  : isModified ? 'border-amber-300 bg-amber-50 focus:border-amber-500'
+                  : 'border-slate-200 focus:border-indigo-400'
+                }`}
+              />
+              <span className="text-[10px] text-slate-400 w-6">hrs</span>
+              {!isNaN(inputVal) && val !== '' && mw.committedHours > 0 && (
+                <span className={`text-[9px] font-bold w-12 text-right ${
+                  inputVal <= mw.committedHours ? 'text-emerald-600' : 'text-rose-600'
+                }`}>
+                  {inputVal <= mw.committedHours
+                    ? `+${(mw.committedHours - inputVal).toFixed(1)}h`
+                    : `-${(inputVal - mw.committedHours).toFixed(1)}h`}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="border-t border-slate-200 px-4 py-2.5 flex items-center justify-between bg-white gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {filledMembers.length > 0 && (
+            <span className="text-[10px] text-slate-500 shrink-0">
+              <span className="font-semibold text-slate-700">{inputTotal.toFixed(1)}h</span>
+              {' / '}
+              <span className="font-semibold text-slate-700">{totalPlanned}h</span>
+            </span>
+          )}
+          {inputEfficiencyPct !== null && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+              inputEfficiencyPct >= 100 ? 'bg-emerald-50 text-emerald-700'
+              : inputEfficiencyPct >= 80  ? 'bg-amber-50 text-amber-700'
+              : 'bg-rose-50 text-rose-700'
+            }`}>
+              {inputEfficiencyPct}% efficiency
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {justSaved && (
+            <span className="text-[10px] font-semibold text-emerald-600">✓ Saved</span>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleSaveAll()}
+            disabled={!canSave}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              isSaving ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              : isDirty  ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-100'
+              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+            }`}
+          >
+            {isSaving ? 'Saving…' : 'Save actuals'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Interactive Sprint Header ───────────────────────────────────────────────
 function EditableSprintHeader({
-  sprint, workspaceId, budgetHours, plannedHours, bufferHours, blockedCount, onRefresh
+  sprint, workspaceId, budgetHours, plannedHours, bufferHours, blockedCount, memberWorkload, memberActuals, onRefresh
 }: {
   sprint: SprintDto;
   workspaceId: string;
@@ -532,8 +689,11 @@ function EditableSprintHeader({
   plannedHours: number;
   bufferHours: number;
   blockedCount: number;
+  memberWorkload: SprintBoardDto['memberWorkload'];
+  memberActuals: SprintBoardDto['memberActuals'];
   onRefresh: () => void;
 }) {
+  const [showActuals, setShowActuals] = useState(false);
   const [editingField, setEditingField] = useState<'name' | 'goal' | 'days' | 'dates' | 'release' | null>(null);
   const [tempName, setTempName] = useState(sprint.name);
   const [tempGoal, setTempGoal] = useState(sprint.goal ?? '');
@@ -870,13 +1030,22 @@ function EditableSprintHeader({
 
         {/* Right section: Budget status */}
         <div className="min-w-[200px] flex-shrink-0 flex flex-col items-end gap-2">
-          <button
-            type="button"
-            onClick={handleDeleteSprint}
-            className="text-[11px] font-medium text-rose-600 hover:text-rose-700 transition-colors"
-          >
-            Delete sprint
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowActuals((v) => !v)}
+              className={`text-[11px] font-semibold transition-colors ${showActuals ? 'text-emerald-700 underline' : 'text-emerald-600 hover:text-emerald-700'}`}
+            >
+              {showActuals ? 'Hide actuals' : 'Log actuals'}
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteSprint}
+              className="text-[11px] font-medium text-rose-600 hover:text-rose-700 transition-colors"
+            >
+              Delete sprint
+            </button>
+          </div>
           {blockedCount > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 border border-red-100 px-3 py-1 text-xs font-bold text-red-600 animate-pulse">
               🚫 {blockedCount} Blocked Task{blockedCount > 1 ? 's' : ''}
@@ -902,6 +1071,16 @@ function EditableSprintHeader({
         </div>
 
       </div>
+
+      {showActuals && (
+        <SprintActualsPanel
+          sprintId={sprint.id}
+          workspaceId={workspaceId}
+          memberWorkload={memberWorkload}
+          memberActuals={memberActuals}
+          onSaved={onRefresh}
+        />
+      )}
     </div>
   );
 }
@@ -1504,6 +1683,8 @@ export function SprintBoardView({ board, workspaceId, onRefresh }: Props) {
         plannedHours={board.plannedHours}
         bufferHours={board.bufferHours}
         blockedCount={blockedCount}
+        memberWorkload={board.memberWorkload}
+        memberActuals={board.memberActuals}
         onRefresh={onRefresh}
       />
 

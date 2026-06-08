@@ -373,4 +373,4 @@ Optional project-level summary row in Overview header metrics (not required for 
 
 ---
 
-*Implemented 2026-06-08. All 7 steps complete. Both TypeScript projects compile clean.*
+*Implemented 2026-06-08, revised 2026-06-08: pivoted from per-task actuals to per-sprint per-member actuals (`SprintMemberActual` model). Both TypeScript projects compile clean.*

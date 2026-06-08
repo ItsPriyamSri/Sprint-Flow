@@ -140,8 +140,21 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
       where: { sprintId: { in: allSprintIds } },
       select: {
         id: true, sprintId: true, priority: true, done: true, blocked: true, updatedAt: true,
-        assignments: { select: { projectMemberId: true, hours: true, actualHours: true } },
+        assignments: { select: { projectMemberId: true, hours: true } },
         column: { select: { key: true } },
+      },
+    });
+
+    const allSprintActuals = await prisma.sprintMemberActual.findMany({
+      where: { sprintId: { in: allSprintIds } },
+      select: { sprintId: true, projectMemberId: true, actualHours: true },
+    });
+
+    const backlogTaskCount = await prisma.task.count({
+      where: {
+        projectId,
+        done: false,
+        OR: [{ sprintId: null }, { deferred: true }],
       },
     });
 
@@ -185,22 +198,28 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
       const todoTasks = sprintTasks.filter((t) => !t.done && !t.blocked && (t.column?.key === 'todo' || t.column?.key === 'backlog')).length;
       const inProgressTasks = sprintTasks.filter((t) => !t.done && !t.blocked && (t.column?.key === 'in_progress' || t.column?.key === 'review')).length;
 
-      // Estimation performance: done tasks only, assignments with actuals logged
-      const doneTasks = sprintTasks.filter((t) => t.done);
-      const doneAssignmentsWithActuals = doneTasks.flatMap((t) =>
-        t.assignments.filter((a) => a.actualHours != null),
+      // Estimation performance: per-member sprint actuals
+      const sprintActuals = allSprintActuals.filter((a) => a.sprintId === sprint.id);
+      const actualsLoggedCount = sprintActuals.length;
+      // Members with any planned hours in this sprint
+      const membersWithPlanned = project.members.filter((m) =>
+        sprintTasks.some((t) => t.assignments.some((a) => a.projectMemberId === m.id && Number(a.hours) > 0)),
       );
-      const actualsExpectedCount = doneTasks.reduce(
-        (s, t) => s + t.assignments.filter((a) => Number(a.hours) > 0).length, 0,
-      );
-      const actualsLoggedCount = doneAssignmentsWithActuals.length;
-      const sumPlannedDone = doneAssignmentsWithActuals.reduce((s, a) => s + Number(a.hours), 0);
-      const sumActualDone = doneAssignmentsWithActuals.reduce((s, a) => s + Number(a.actualHours), 0);
-      const varianceHours = actualsLoggedCount > 0 ? sumPlannedDone - sumActualDone : null;
-      const variancePct = actualsLoggedCount > 0 && sumPlannedDone > 0
-        ? ((sumPlannedDone - sumActualDone) / sumPlannedDone) * 100 : null;
-      const efficiencyPct = actualsLoggedCount > 0 && sumActualDone > 0
-        ? (sumPlannedDone / sumActualDone) * 100 : null;
+      const actualsExpectedCount = membersWithPlanned.length;
+      // Planned hours for members who have logged actuals
+      const sumPlannedLogged = sprintActuals.reduce((s, actual) => {
+        const memberPlanned = sprintTasks.reduce((ms, t) => {
+          const a = t.assignments.find((a) => a.projectMemberId === actual.projectMemberId);
+          return ms + (a ? Number(a.hours) : 0);
+        }, 0);
+        return s + memberPlanned;
+      }, 0);
+      const sumActual = sprintActuals.reduce((s, a) => s + Number(a.actualHours), 0);
+      const varianceHours = actualsLoggedCount > 0 ? sumPlannedLogged - sumActual : null;
+      const variancePct = actualsLoggedCount > 0 && sumPlannedLogged > 0
+        ? ((sumPlannedLogged - sumActual) / sumPlannedLogged) * 100 : null;
+      const efficiencyPct = actualsLoggedCount > 0 && sumActual > 0
+        ? (sumPlannedLogged / sumActual) * 100 : null;
 
       return {
         sprint: sprintDto(sprint),
@@ -213,8 +232,8 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
         todoTasks,
         inProgressTasks,
         memberWorkload,
-        actualHours: sumActualDone,
-        plannedHoursDone: sumPlannedDone,
+        actualHours: sumActual,
+        plannedHoursLogged: sumPlannedLogged,
         varianceHours,
         variancePct,
         efficiencyPct,
@@ -255,6 +274,7 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
       allSprints: sprintHealth,
       daysToNextRelease,
       tasksCompletedThisWeek,
+      backlogTasks: backlogTaskCount,
     });
   } catch (e) { next(e); }
 });
@@ -766,7 +786,6 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
           projectMemberId: x.projectMemberId,
           memberName: x.projectMember.user.name,
           hours: Number(x.hours),
-          actualHours: x.actualHours != null ? Number(x.actualHours) : null,
         })),
         totalHours,
         position: t.position,
@@ -952,7 +971,6 @@ projectsRouter.get('/:projectId/backlog', async (req: Request, res: Response, ne
           projectMemberId: a.projectMemberId,
           memberName: a.projectMember.user.name,
           hours: Number(a.hours),
-          actualHours: a.actualHours != null ? Number(a.actualHours) : null,
         })),
         totalHours,
         position: t.position,
@@ -1057,8 +1075,8 @@ projectsRouter.get('/:projectId/dashboard', async (req: Request, res: Response, 
     const blockedTasks = allTasks.filter(t => t.blocked).length;
     const deferredTasks = allTasks.filter(t => t.deferred).length;
     
-    // Backlog tasks = tasks not in any sprint, not deferred, and not done
-    const backlogTasks = allTasks.filter(t => !t.sprintId && !t.deferred && !t.done).length;
+    // Backlog tasks = tasks visible on the backlog page (no sprint OR deferred), not done
+    const backlogTasks = allTasks.filter(t => (!t.sprintId || t.deferred) && !t.done).length;
     
     // In progress tasks = tasks where column key is in_progress or review, done is false, blocked is false
     const inProgressTasks = allTasks.filter(t => !t.done && !t.blocked && (t.column.key === 'in_progress' || t.column.key === 'review')).length;

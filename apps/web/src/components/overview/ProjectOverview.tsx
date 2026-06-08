@@ -78,7 +78,7 @@ function EstimationPerformance({ sh }: { sh: SprintHealthDto }) {
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-slate-500">Actual / Planned</span>
             <span className="text-[10px] font-semibold text-slate-700">
-              {sh.actualHours}h / {sh.plannedHoursDone}h
+              {sh.actualHours}h / {sh.plannedHoursLogged}h
             </span>
           </div>
 
@@ -245,7 +245,7 @@ function SprintCard({
 
 export function ProjectOverview({ data }: Props) {
   const queryClient = useQueryClient();
-  const { project, currentSprint, allSprints, daysToNextRelease, tasksCompletedThisWeek } = data;
+  const { project, currentSprint, allSprints, daysToNextRelease, tasksCompletedThisWeek, backlogTasks } = data;
   
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
@@ -261,9 +261,15 @@ export function ProjectOverview({ data }: Props) {
     ? Math.round(completedWithActuals.reduce((s, sh) => s + sh.efficiencyPct!, 0) / completedWithActuals.length)
     : null;
 
-  // Current sprint efficiency (if actuals logged)
-  const activeEfficiency = currentSprint?.efficiencyPct != null
-    ? Math.round(currentSprint.efficiencyPct)
+  // Sprint efficiency: prefer active sprint, fall back to most recent sprint with actuals
+  const sprintWithActuals = [...allSprints].reverse().find((sh) => sh.efficiencyPct != null);
+  const activeEfficiency =
+    currentSprint?.efficiencyPct != null ? Math.round(currentSprint.efficiencyPct)
+    : sprintWithActuals?.efficiencyPct != null ? Math.round(sprintWithActuals.efficiencyPct)
+    : null;
+  const efficiencySprintLabel =
+    currentSprint?.efficiencyPct != null ? currentSprint.sprint.name
+    : sprintWithActuals ? sprintWithActuals.sprint.name
     : null;
 
   return (
@@ -276,7 +282,7 @@ export function ProjectOverview({ data }: Props) {
 
       <div className="flex-1 px-6 py-6 space-y-8">
         {/* Metric cards */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <MetricCard
             label="Planned vs Budget"
             value={`${totalPlanned}h`}
@@ -295,9 +301,15 @@ export function ProjectOverview({ data }: Props) {
             sub="tasks completed"
           />
           <MetricCard
+            label="Backlog"
+            value={backlogTasks}
+            sub="tasks not in a sprint"
+            accent={backlogTasks > 0 ? 'text-amber-600' : 'text-slate-900'}
+          />
+          <MetricCard
             label="Sprint Efficiency"
             value={activeEfficiency !== null ? `${activeEfficiency}%` : '—'}
-            sub={activeEfficiency !== null ? 'current sprint' : 'No actuals logged'}
+            sub={efficiencySprintLabel ?? 'No actuals logged'}
             accent={
               activeEfficiency === null ? 'text-slate-400'
               : activeEfficiency >= 100 ? 'text-emerald-600'

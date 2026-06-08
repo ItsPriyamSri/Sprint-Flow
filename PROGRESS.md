@@ -11,14 +11,14 @@
 
 | Area | What's implemented |
 |---|---|
-| **DB schema** | `actualHours Decimal?` added to `TaskAssignment` (migration `20260608052738_add_task_assignment_actual_hours`). Planned hours remain on `hours`; actuals on the new field. |
-| **API: upsert assignment** | `PUT /tasks/:taskId/assignments/:projectMemberId` now accepts optional `actualHours`. Backend service writes both planned and actual in one upsert. |
-| **API: overview aggregates** | `GET /projects/:projectId` now computes per-sprint `actualHours`, `plannedHoursDone`, `varianceHours`, `variancePct`, `efficiencyPct`, `actualsLoggedCount`, `actualsExpectedCount` — restricted to done tasks with logged actuals only. |
-| **Shared types** | `TaskAssignmentDto.actualHours: number \| null` and new fields on `SprintHealthDto`. |
-| **Sprint board owner chips** | Chip label now shows `Xh/Ya` when actuals logged. Edit popover has separate Planned and Actual inputs. |
-| **Scrum task drawer** | Assignments section now shows dual Planned / Actual columns per member with green-tinted actual input. |
-| **Overview — Estimation Performance** | New `EstimationPerformance` sub-component inside each `SprintCard`: shows Actual/Planned hours, variance (±h and %), efficiency %, and an amber badge when some assignments are not yet logged. Color-coded: emerald ≥ 100%, amber 80–99%, rose < 80%. |
-| **All serializers** | `actualHours` included in sprint board, flow board, backlog, and my-work assignment serialization. |
+| **DB schema** | `SprintMemberActual` model added (migration `20260608055919_pivot_to_sprint_member_actuals`): one row per member per sprint, stores `actualHours`. Replaces the aborted per-task `TaskAssignment.actualHours` approach. |
+| **API: sprint actuals** | `PUT /sprints/:sprintId/actuals/:projectMemberId` — upsert one number per member. `DELETE` to clear. Sprint board GET response includes `memberActuals[]`. |
+| **API: overview aggregates** | `GET /projects/:projectId` computes per-sprint `actualHours`, `plannedHoursLogged`, `varianceHours`, `variancePct`, `efficiencyPct`, `actualsLoggedCount`, `actualsExpectedCount` from `SprintMemberActual` records. |
+| **Shared types** | `SprintMemberActualDto` added. `SprintBoardDto.memberActuals`. `SprintHealthDto` updated to use logged-member aggregation. `TaskAssignmentDto` kept clean (no actuals field). |
+| **Sprint board — Log Actuals panel** | "Log actuals" toggle button in sprint header. Expands a panel showing every member: planned hours (from assignments), actual hours input (green when logged), live variance badge per row, and a footer with total actual / total planned + efficiency %. Saves on blur/Enter. |
+| **Sprint board owner chips** | Reverted to single committed-hours display — no actuals at the task level. |
+| **Scrum task drawer + Flow board drawer** | Reverted to single planned hours per member — actuals live on the sprint, not the task. |
+| **Overview — Estimation Performance** | `EstimationPerformance` in each SprintCard: Actual/Planned, Variance, Efficiency %; color-coded. "Sprint Efficiency" header card shows active sprint efficiency. |
 
 ---
 

@@ -5,7 +5,6 @@ export interface TaskAssignment {
   projectMemberId: string;
   memberName: string;
   hours: number;
-  actualHours: number | null;
 }
 
 export interface TaskDetail {
@@ -103,11 +102,10 @@ export async function upsertAssignment(
   workspaceId: string,
   projectMemberId: string,
   hours: number,
-  actualHours?: number | null,
 ) {
   return apiFetch(`/tasks/${taskId}/assignments/${projectMemberId}?workspaceId=${workspaceId}`, {
     method: 'PUT',
-    body: JSON.stringify({ hours, ...(actualHours !== undefined && { actualHours }) }),
+    body: JSON.stringify({ hours }),
   });
 }
 

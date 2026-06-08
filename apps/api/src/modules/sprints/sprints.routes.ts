@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
+import { Prisma } from '@sprintflow/db';
 import { assertWorkspaceMember } from '../../lib/rbac';
 import { AppError, NotFoundError, ForbiddenError, ConflictError } from '../../lib/errors';
 import type { Request, Response, NextFunction } from 'express';
@@ -103,6 +104,11 @@ sprintsRouter.get('/:sprintId/board', async (req: Request, res: Response, next: 
       },
     });
 
+    const memberActualsRaw = await prisma.sprintMemberActual.findMany({
+      where: { sprintId },
+      include: { projectMember: { select: { user: { select: { name: true } } } } },
+    });
+
     const epics = await prisma.epic.findMany({
       where: {
         workspaceId,
@@ -174,7 +180,6 @@ sprintsRouter.get('/:sprintId/board', async (req: Request, res: Response, next: 
           projectMemberId: a.projectMemberId,
           memberName: a.projectMember.user.name,
           hours: Number(a.hours),
-          actualHours: a.actualHours != null ? Number(a.actualHours) : null,
         })),
         totalHours: t.assignments.reduce((sum, a) => sum + Number(a.hours), 0),
         position: t.position,
@@ -185,6 +190,11 @@ sprintsRouter.get('/:sprintId/board', async (req: Request, res: Response, next: 
       plannedHours,
       bufferHours,
       memberWorkload,
+      memberActuals: memberActualsRaw.map((a) => ({
+        projectMemberId: a.projectMemberId,
+        memberName: a.projectMember.user.name,
+        actualHours: Number(a.actualHours),
+      })),
     });
   } catch (e) { next(e); }
 });
@@ -331,3 +341,43 @@ sprintsRouter.delete('/:sprintId', async (req: Request, res: Response, next: Nex
     res.status(204).send();
   } catch (e) { next(e); }
 });
+
+// ── Sprint member actuals ─────────────────────────────────────────────────────
+
+sprintsRouter.put(
+  '/:sprintId/actuals/:projectMemberId',
+  validate(z.object({ actualHours: z.number().min(0).max(10000) })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const sprintId = req.params['sprintId'] as string;
+      const projectMemberId = req.params['projectMemberId'] as string;
+      const workspaceId = await assertWsAccess(req, 'MEMBER');
+      const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
+      if (!sprint) throw new NotFoundError('Sprint');
+      if (sprint.workspaceId !== workspaceId) throw new ForbiddenError('Sprint not in this workspace');
+      const { actualHours } = req.body as { actualHours: number };
+      const actual = await prisma.sprintMemberActual.upsert({
+        where: { sprintId_projectMemberId: { sprintId, projectMemberId } },
+        update: { actualHours: new Prisma.Decimal(actualHours) },
+        create: { sprintId, projectMemberId, actualHours: new Prisma.Decimal(actualHours) },
+      });
+      res.json({ projectMemberId: actual.projectMemberId, actualHours: Number(actual.actualHours) });
+    } catch (e) { next(e); }
+  },
+);
+
+sprintsRouter.delete(
+  '/:sprintId/actuals/:projectMemberId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const sprintId = req.params['sprintId'] as string;
+      const projectMemberId = req.params['projectMemberId'] as string;
+      const workspaceId = await assertWsAccess(req, 'MEMBER');
+      const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
+      if (!sprint) throw new NotFoundError('Sprint');
+      if (sprint.workspaceId !== workspaceId) throw new ForbiddenError('Sprint not in this workspace');
+      await prisma.sprintMemberActual.deleteMany({ where: { sprintId, projectMemberId } });
+      res.status(204).send();
+    } catch (e) { next(e); }
+  },
+);

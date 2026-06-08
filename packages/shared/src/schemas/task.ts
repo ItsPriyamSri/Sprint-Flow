@@ -36,6 +36,5 @@ export type CreateCommentInput = z.infer<typeof CreateCommentSchema>;
 export const UpsertAssignmentSchema = z.object({
   projectMemberId: z.string().cuid(),
   hours: z.number().min(0).max(1000),
-  actualHours: z.number().min(0).max(1000).nullable().optional(),
 });
 export type UpsertAssignmentInput = z.infer<typeof UpsertAssignmentSchema>;

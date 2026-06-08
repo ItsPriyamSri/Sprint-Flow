@@ -74,14 +74,14 @@ export interface SprintHealthDto {
   todoTasks: number;
   inProgressTasks: number;
   memberWorkload: MemberWorkloadDto[];
-  // Actual hours & estimation performance (done tasks only)
-  actualHours: number;
-  plannedHoursDone: number; // Σ planned on done tasks that have actuals logged
+  // Estimation performance — sourced from SprintMemberActual (per-person end-of-sprint entry)
+  actualHours: number;          // Σ(SprintMemberActual.actualHours) for members who logged
+  plannedHoursLogged: number;   // Σ planned hours for members who logged actuals
   varianceHours: number | null; // null if no actuals logged
   variancePct: number | null;
   efficiencyPct: number | null;
-  actualsLoggedCount: number; // assignments with actualHours on done tasks
-  actualsExpectedCount: number; // assignments on done tasks with planned > 0
+  actualsLoggedCount: number;   // members who have logged actuals
+  actualsExpectedCount: number; // members with committed hours > 0 in this sprint
 }
 
 export interface MemberWorkloadDto {
@@ -98,6 +98,7 @@ export interface ProjectOverviewDto {
   allSprints: SprintHealthDto[];
   daysToNextRelease: number | null;
   tasksCompletedThisWeek: number;
+  backlogTasks: number;
 }
 
 // ─── Board DTOs ───────────────────────────────────────────────────────────────
@@ -118,7 +119,12 @@ export interface TaskAssignmentDto {
   projectMemberId: string;
   memberName: string;
   hours: number;
-  actualHours: number | null;
+}
+
+export interface SprintMemberActualDto {
+  projectMemberId: string;
+  memberName: string;
+  actualHours: number;
 }
 
 export interface TaskDto {
@@ -171,6 +177,7 @@ export interface SprintBoardDto {
   plannedHours: number;
   bufferHours: number;
   memberWorkload: MemberWorkloadDto[];
+  memberActuals: SprintMemberActualDto[]; // per-person actual hours logged for this sprint
 }
 
 // ─── Sprint DTOs ──────────────────────────────────────────────────────────────

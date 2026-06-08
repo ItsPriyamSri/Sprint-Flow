@@ -314,7 +314,6 @@ export async function upsertAssignment(
   actorId: string,
   projectMemberId: string,
   hours: number,
-  actualHours?: number | null,
 ) {
   const task = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
 
@@ -324,22 +323,10 @@ export async function upsertAssignment(
     throw new ForbiddenError('Member does not belong to this task\'s project');
   }
 
-  const updateData: { hours: Prisma.Decimal; actualHours?: Prisma.Decimal | null } = {
-    hours: new Prisma.Decimal(hours),
-  };
-  if (actualHours !== undefined) {
-    updateData.actualHours = actualHours != null ? new Prisma.Decimal(actualHours) : null;
-  }
-
   return prisma.taskAssignment.upsert({
     where: { taskId_projectMemberId: { taskId, projectMemberId } },
-    update: updateData,
-    create: {
-      taskId,
-      projectMemberId,
-      hours: new Prisma.Decimal(hours),
-      ...(actualHours !== undefined && { actualHours: actualHours != null ? new Prisma.Decimal(actualHours) : null }),
-    },
+    update: { hours: new Prisma.Decimal(hours) },
+    create: { taskId, projectMemberId, hours: new Prisma.Decimal(hours) },
   });
 }
 
@@ -434,7 +421,6 @@ export function serializeAssignments(
     id: string;
     projectMemberId: string;
     hours: Prisma.Decimal;
-    actualHours: Prisma.Decimal | null;
     projectMember: { id: string; user: { id: string; name: string } };
   }>,
 ) {
@@ -443,6 +429,5 @@ export function serializeAssignments(
     projectMemberId: a.projectMemberId,
     memberName: a.projectMember.user.name,
     hours: Number(a.hours),
-    actualHours: a.actualHours != null ? Number(a.actualHours) : null,
   }));
 }
