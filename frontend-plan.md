@@ -35,6 +35,7 @@ Per 2026 guidance, motion should **guide rather than flash**, and dashboards win
 3. **Reserve red/pulse for things that need a human.** Blocked / overloaded only. Everything else stays calm.
 4. **Respect the system.** Every animation gated behind `motion-safe:` (honours `prefers-reduced-motion`); every interactive element gets a visible `focus-visible` ring.
 5. **5–9 elements per zone.** Keep the 6-card summary row; don't add cards.
+6. **Theme-ready from the start.** Every colour decision lives in the shared primitives / tone map, not scattered in page markup — so dark mode (Phase 2) becomes a `dark:` variant on a handful of components instead of a find-and-replace across two files. Build light correctly first; wire dark second.
 
 ---
 
@@ -140,6 +141,10 @@ All gated behind `motion-safe:` and tuned to *guide attention*, not flash:
 | `apps/web/src/hooks/useCountUp.ts` *(new)* | Reduced-motion-aware count-up |
 | `apps/web/src/components/overview/ProjectOverview.tsx` | Adopt primitives; metric icons/accents/hover; sprint-card theming; bar; button states |
 | `apps/web/src/app/(app)/dashboard/page.tsx` | Adopt primitives; dial back gradients/weight; emoji→SVG; motion audit; calmer banner |
+| `apps/web/tailwind.config.*` *(Phase 2)* | `darkMode: 'class'` |
+| `apps/web/src/components/theme/ThemeProvider.tsx` *(new, Phase 2)* | light/dark/system + `.dark` on `<html>` + persistence |
+| `apps/web/src/components/theme/ThemeToggle.tsx` *(new, Phase 2)* | sun/moon toggle control |
+| `apps/web/src/app/layout.tsx` *(Phase 2)* | inline FOUC-guard script in `<head>` |
 
 ---
 
@@ -156,6 +161,51 @@ All gated behind `motion-safe:` and tuned to *guide attention*, not flash:
 | 6 | Both — motion audit (`motion-safe:` everywhere) + accessibility/focus pass | ~20 min |
 
 **Total estimated effort:** ~2.5 h
+
+> **Priority:** Steps 0–6 above ship first and stand alone. Dark mode (Phase 2 below) is **explicitly lower priority** — do not block or interleave it with the polish work. It is documented here only so the primitives are built theme-aware.
+
+---
+
+## Phase 2 — Dark mode *(lower priority — after Steps 0–6 land)*
+
+Dark mode is **not** part of the polish milestone. It's a follow-on phase that piggybacks on the shared primitives from Step 0. Because the polish work funnels every colour through `MetricCard` / `ProgressBar` / `StatusBadge` / `SectionHeader` / the tone map, dark mode for these two pages collapses to "add `dark:` variants in ~6 components" rather than editing page markup. **Do this work only after the light-mode polish is complete and reviewed.**
+
+### Scope split
+
+- **In scope for this plan:** Overview + Dashboard go fully dark-aware, *and* the app-wide theming scaffolding (config, provider, toggle, persistence) is stood up here since it's shared infrastructure.
+- **Out of scope (separate follow-up effort):** dark mode for the *rest* of the pages (Sprints, Epics, My Work, Backlog, Team, Activity, Flow view, Import, board/drawer components). Tracked as a known TODO below — same mechanism, just more surfaces to sweep.
+
+### Infrastructure (one-time)
+
+| Item | Detail |
+|---|---|
+| Tailwind config | Set `darkMode: 'class'` so theming is explicit and toggleable (not purely OS-driven). |
+| Theme provider | `apps/web/src/components/theme/ThemeProvider.tsx` — `light \| dark \| system`; applies/removes `.dark` on `<html>`. |
+| Persistence + FOUC guard | Persist choice in `localStorage`; inline `<head>` script sets the class **before** first paint to avoid a flash of the wrong theme. Default to `system` (respects `prefers-color-scheme`). |
+| Toggle control | Small sun/moon control (reuse `icons.tsx`) in the top bar / sidebar; `motion-safe` icon cross-fade. |
+
+### Token / primitive work
+
+| Item | Detail |
+|---|---|
+| Surfaces | `bg-white` → `bg-white dark:bg-slate-900`; page bg `slate-50/30` → `dark:bg-slate-950`; borders `slate-200` → `dark:border-slate-800`. |
+| Text ramp | `text-slate-900 → dark:text-slate-100`, `text-slate-500 → dark:text-slate-400`, `text-slate-400 → dark:text-slate-500`. |
+| Tone map dark variants | Each tone gets a dark pairing in one place (e.g. emerald: `text-emerald-600` → `dark:text-emerald-400`, wash `from-emerald-50/10` → `dark:from-emerald-500/10`). Bars use lighter 400-level fills on dark. |
+| Shadows → rings | Soft drop-shadows read poorly on dark surfaces; swap the card shadow token for a subtle `dark:ring-1 dark:ring-white/5` + deeper shadow. |
+| Banner blobs | Lower-opacity colour blobs already tone down; verify they read on `slate-950` (use `/10`–`/20` indigo). |
+| Contrast pass | Re-verify AA for toned sub-labels on dark surfaces (the `/80` opacity sub-text especially). |
+
+### Implementation order (Phase 2)
+
+| Step | Area | Effort |
+|---|---|---|
+| 7 | Tailwind `darkMode: 'class'` + `ThemeProvider` + FOUC guard + toggle | ~45 min |
+| 8 | Dark variants in shared primitives + tone map (Step 0 components) | ~40 min |
+| 9 | Overview + Dashboard sweep for any page-level colour not yet routed through primitives | ~30 min |
+| 10 | Contrast/QA pass in both themes (+ `prefers-color-scheme` default) | ~20 min |
+
+**Phase 2 estimated effort (Overview + Dashboard + infra):** ~2.25 h
+**Remaining app-wide dark sweep (separate effort):** not estimated here — same `dark:` mechanism applied page by page once primitives are proven.
 
 ---
 
