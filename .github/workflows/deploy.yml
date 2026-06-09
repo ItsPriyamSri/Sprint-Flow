@@ -1,0 +1,119 @@
+name: Deploy to AWS ECS
+
+on:
+  push:
+    branches: [main]
+
+# OIDC token needed for keyless AWS authentication
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  deploy:
+    name: Build, push, and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── AWS auth via OIDC (no long-lived keys stored as secrets) ────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── ECR login ───────────────────────────────────────────────────────────
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Build & push API image ───────────────────────────────────────────────
+      - name: Build and push API image
+        id: build-api
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --file docker/Dockerfile.api \
+            --tag "$ECR_REGISTRY/${{ secrets.ECR_API_REPOSITORY_URI }}:$IMAGE_TAG" \
+            --tag "$ECR_REGISTRY/${{ secrets.ECR_API_REPOSITORY_URI }}:latest" \
+            .
+          docker push "$ECR_REGISTRY/${{ secrets.ECR_API_REPOSITORY_URI }}:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/${{ secrets.ECR_API_REPOSITORY_URI }}:latest"
+          echo "image=$ECR_REGISTRY/${{ secrets.ECR_API_REPOSITORY_URI }}:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      # ── Build & push Web image ───────────────────────────────────────────────
+      - name: Build and push Web image
+        id: build-web
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --file docker/Dockerfile.web \
+            --build-arg NEXT_PUBLIC_API_URL="${{ vars.NEXT_PUBLIC_API_URL }}" \
+            --tag "$ECR_REGISTRY/${{ secrets.ECR_WEB_REPOSITORY_URI }}:$IMAGE_TAG" \
+            --tag "$ECR_REGISTRY/${{ secrets.ECR_WEB_REPOSITORY_URI }}:latest" \
+            .
+          docker push "$ECR_REGISTRY/${{ secrets.ECR_WEB_REPOSITORY_URI }}:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/${{ secrets.ECR_WEB_REPOSITORY_URI }}:latest"
+          echo "image=$ECR_REGISTRY/${{ secrets.ECR_WEB_REPOSITORY_URI }}:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      # ── Download current task definitions ────────────────────────────────────
+      - name: Download API task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition sprintflow-api \
+            --query taskDefinition \
+            > /tmp/task-def-api.json
+
+      - name: Download Web task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition sprintflow-web \
+            --query taskDefinition \
+            > /tmp/task-def-web.json
+
+      # ── Render new task-def revisions with SHA-tagged images ─────────────────
+      - name: Render API task definition
+        id: render-api
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: /tmp/task-def-api.json
+          container-name: api
+          image: ${{ steps.build-api.outputs.image }}
+
+      - name: Render Web task definition
+        id: render-web
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: /tmp/task-def-web.json
+          container-name: web
+          image: ${{ steps.build-web.outputs.image }}
+
+      # ── Deploy to ECS ────────────────────────────────────────────────────────
+      - name: Deploy API service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-api.outputs.task-definition }}
+          service: ${{ secrets.ECS_API_SERVICE }}
+          cluster: ${{ secrets.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Deploy Web service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-web.outputs.task-definition }}
+          service: ${{ secrets.ECS_WEB_SERVICE }}
+          cluster: ${{ secrets.ECS_CLUSTER }}
+          wait-for-service-stability: true

@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction, ErrorRequestHandler } from 'expre
 import { ZodError } from 'zod';
 import { Prisma } from '@sprintflow/db';
 import { AppError } from '../lib/errors';
+import { logger } from '../lib/logger';
 
 export const errorHandler: ErrorRequestHandler = (
   err: unknown,
@@ -44,6 +45,6 @@ export const errorHandler: ErrorRequestHandler = (
     }
   }
 
-  console.error('[Unhandled]', err);
+  logger.error({ err }, 'Unhandled error');
   res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
 };

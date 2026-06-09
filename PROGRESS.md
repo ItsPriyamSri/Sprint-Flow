@@ -1,9 +1,126 @@
 # SprintFlow — Build Progress & Handoff
 
-**Last updated:** 2026-06-08  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)** · **14 (Sprint Actual Hours, Variance & Efficiency)**  
-**Status:** Full Scrum platform through Phase 14 — actual hours tracking, variance and efficiency metrics on the Overview page. See AI_ROADMAP.md for AI work.  
+**Last updated:** 2026-06-09  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)** · **14 (Sprint Actual Hours, Variance & Efficiency)** · **15 (Frontend Polish — Overview & Dashboard)** · **16 (AWS Deployment Readiness)**  
+**Status:** Full Scrum platform through Phase 16 — all code changes from the AWS deployment plan applied; project is production-deployable on ECS Fargate. Real admin/team email accounts are pending (current seed uses mock credentials).  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+---
+
+## Phase 16 — AWS Deployment Readiness (2026-06-09)
+
+All code-side changes from `deployment-plan.md` applied. The project is now ready to deploy on AWS ECS Fargate once the AWS-side infrastructure (ECS, RDS, ECR, ALB, S3 bucket, IAM roles) is provisioned.
+
+### Phase 1 — Critical blockers (all fixed)
+
+| # | Item | Files changed |
+|---|---|---|
+| 1 | **S3StorageDriver** — ECS containers are ephemeral; added `S3StorageDriver` (lazy `@aws-sdk/client-s3` import, uses ECS task role, no access keys in env). `STORAGE_DRIVER=s3` selects it at startup. | `apps/api/src/lib/storage.ts`, `apps/api/src/lib/env.ts`, `apps/api/package.json` |
+| 2 | **Graceful SIGTERM drain** — was `prisma.$disconnect(); process.exit(0)`. Now calls `server.close()` first, waits up to 10 s for in-flight requests, then disconnects Prisma. Handles both `SIGTERM` and `SIGINT`. | `apps/api/src/server.ts` |
+| 3 | **Production seed guard** — `seed.ts` refuses to run when `NODE_ENV=production` unless `SEED_ADMIN_PASSWORD` is explicitly set and passes strength checks (≥12 chars, not a known weak value). | `packages/db/src/seed.ts` |
+| 4 | **`NEXT_PUBLIC_API_URL` baked at build time** — added `ARG NEXT_PUBLIC_API_URL` (promoted to `ENV` before `next build`) in `docker/Dockerfile.web`. CI passes the real API URL as a build arg. | `docker/Dockerfile.web` |
+
+### Phase 2 — Production hardening (all applied)
+
+| # | Item | Files changed |
+|---|---|---|
+| 5 | **Structured JSON logging** — added `pino` + `pino-http`. New `apps/api/src/lib/logger.ts` exports a configured pino instance (pretty in dev, raw JSON in prod). `pino-http` middleware added to `app.ts`; `console.error` in `error.ts` replaced with `logger.error`. | `apps/api/src/lib/logger.ts` (new), `apps/api/src/app.ts`, `apps/api/src/server.ts`, `apps/api/src/middleware/error.ts`, `apps/api/package.json` |
+| 6 | **CORS production guard + multi-origin** — `CORS_ORIGIN` is now required when `NODE_ENV=production` (throws at startup if missing). Comma-separated values parsed into an array for `cors({ origin: [...] })`. | `apps/api/src/lib/env.ts`, `apps/api/src/app.ts` |
+| 7 | **DB connection pool limit** — configuration only, no code change. Set `connection_limit=5` (or sized to workload) as a query parameter in `DATABASE_URL` in the ECS task definition. | *(none)* |
+| 8 | **Migration strategy** — two options documented. Default is to keep `migrate deploy` in the entrypoint and rely on the Postgres advisory lock. Preferred for scale: move migrations to a one-off ECS task pre-deploy (then remove from entrypoint). | *(documented in `deployment-plan.md`)* |
+| 9 | **Non-root user in API Dockerfile** — added `apiuser` (uid 1001) to the runtime stage; `/app` and `/app/storage` chowned; `USER apiuser` before `ENTRYPOINT`. | `docker/Dockerfile.api` |
+| 10 | **Fixed `pnpm-lock.yaml*` glob** — changed `COPY pnpm-lock.yaml* ./` → `COPY pnpm-lock.yaml ./` in both Dockerfiles; dropped `|| pnpm install` fallback. A missing lockfile now fails the build loudly. | `docker/Dockerfile.api`, `docker/Dockerfile.web` |
+
+### Phase 3 — CI/CD pipeline
+
+| # | Item | Files changed |
+|---|---|---|
+| 11 | **GitHub Actions deploy workflow** — triggers on push to `main`. OIDC auth (no long-lived keys), SHA-tagged ECR pushes for both API and Web images, renders new ECS task-definition revisions pointing at the SHA-tagged image, deploys API then Web services. | `.github/workflows/deploy.yml` (new) |
+
+### Pending (not blocking code deploy)
+
+- **Real admin/team email accounts** — seed still uses mock credentials (`admin@sprintflow.local` / `Admin1234!`). Production deploy will use explicit `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` env vars, or accounts can be created manually via the invite flow. The production seed guard (item 3) ensures the mock password cannot be used in production.
+- **AWS infrastructure** — ECS cluster/services, RDS, ECR repos, ALB, S3 bucket, IAM roles (task role, execution role, GitHub OIDC deploy role) must be provisioned before first deploy. See `deployment-plan.md` → "AWS Prerequisites".
+- **GitHub repo variables/secrets** — `AWS_ROLE_TO_ASSUME`, `AWS_REGION`, `ECR_API_REPOSITORY_URI`, `ECR_WEB_REPOSITORY_URI`, `ECS_CLUSTER`, `ECS_API_SERVICE`, `ECS_WEB_SERVICE`, `NEXT_PUBLIC_API_URL` must be set before the workflow will run.
+
+### Verification (2026-06-09)
+
+- `pnpm install` — 72 new packages added (pino, pino-http, @aws-sdk/client-s3, pino-pretty)
+- `pnpm exec tsc --noEmit -p apps/api/tsconfig.json` — **PASS**
+
+---
+
+## Phase 15 — Frontend Polish: Overview & Dashboard (2026-06-09)
+
+Unified the two previously drifted pages under a single design language. Both pages now render from the same set of shared primitives — no per-page bespoke gradients, no emoji, no inconsistent motion.
+
+### New shared primitives (`apps/web/src/`)
+
+| File | What it does |
+|---|---|
+| `hooks/useCountUp.ts` | Eased 0→value count-up on mount; static under `prefers-reduced-motion` |
+| `components/ui/icons.tsx` | 15 stroked SVG icons (lucide-style) replacing all emoji across both pages |
+| `components/ui/MetricCard.tsx` | Shared metric card: `tone` prop (`neutral \| emerald \| indigo \| rose \| amber \| slate`), optional icon chip, 2 px coloured left-accent, hover-lift, `useCountUp` on numeric values |
+| `components/ui/ProgressBar.tsx` | Animated fill bar: auto-tone by %, mount animation via double-rAF, `motion-safe:` gating |
+| `components/ui/StatusBadge.tsx` | Sprint status pill: ACTIVE gets live indigo pulse dot; handles raw `string` from API safely |
+| `components/ui/SectionHeader.tsx` | Icon chip + title + optional meta / action row; used in all three Dashboard sections |
+
+### Tone map (applied consistently on both pages)
+
+| Tone | Meaning |
+|---|---|
+| `emerald` | Completed / on-track / positive variance |
+| `indigo` | In-progress / active / brand |
+| `rose` | Blocked / over-capacity / negative variance — **only** tone that pulses |
+| `amber` | Backlog / deferred / planning / near-limit |
+| `slate` | Neutral totals / days-to-release |
+| `neutral` | Default / no semantic signal |
+
+### Overview page (`ProjectOverview.tsx`) — brought up
+
+| Area | Change |
+|---|---|
+| **Header** | Added quiet kicker row: `PROJECT OVERVIEW` label + animated live dot when an ACTIVE sprint exists |
+| **Metric cards** | All 6 cards through shared `MetricCard` with SVG icons and semantic tones |
+| **Sprint card status theming** | ACTIVE → indigo ring + subtle indigo wash; PLANNING → 3 px amber left-accent border; COMPLETED → muted slate wash |
+| **Sprint completion bar** | Replaced flat `bg-emerald-500` fill with shared `ProgressBar` (auto-tone + mount animation) |
+| **StatusBadge** | Replaces hand-rolled inline status pills on every sprint card |
+| **Estimation performance** | Variance and Efficiency rendered as tone-tinted left-accent pills instead of bare coloured text |
+| **Blocked banner** | `animate-pulse` → `motion-safe:animate-pulse`; 🚫 emoji → `AlertTriangleIcon` |
+| **Action buttons** | `motion-safe:hover:-translate-y-0.5`, `active:translate-y-0`, `focus-visible:ring-2` on View Sprint / View Board |
+| **Emoji removed** | 🚀 release milestone → `RocketIcon`; trash SVG inlined → `TrashIcon`; plus SVG → `PlusIcon` |
+| **OVERLOADED badge** | `animate-pulse` → `motion-safe:animate-pulse` in team workload table |
+
+### Dashboard page (`dashboard/page.tsx`) — brought in
+
+| Area | Change |
+|---|---|
+| **Summary cards** | All 6 through shared `MetricCard`; `font-black text-4xl` → `font-bold text-3xl`; per-card bespoke gradient washes removed |
+| **Emoji → SVG** | 📅 👥 🚀 📭 ⚠️ 📁 all replaced with stroked SVG icons |
+| **Banner** | Two colour blobs → one low-opacity blob; `font-black` title → `font-bold` |
+| **Sprint progress bars** | `getProgressColor()` gradient strings → shared `ProgressBar` with auto-tone |
+| **Sprint cards** | ACTIVE ring/wash aligned with Overview; `StatusBadge` replaces inline "Active" pill; status dot `animate-pulse` → `motion-safe:animate-pulse` |
+| **Blocked sprint count** | `animate-pulse` → `motion-safe:animate-pulse`; 🚫 → `AlertTriangleIcon` |
+| **Section headers** | All three (`Sprint Health`, `Workload Balance`, `Epic Completion`) through `SectionHeader` with SVG icons |
+| **Owner capacity bar** | `ProgressBar` with `fillClassName` override for gradient/glow (glow gated behind overloaded only) |
+| **Overloaded hours text** | `animate-pulse` → `motion-safe:animate-pulse` |
+| **Owner blocked count** | `animate-pulse` → `motion-safe:animate-pulse` |
+| **Empty states** | `animate-bounce` removed from no-project and no-sprint states → static SVG icons |
+| **Error state** | ⚠️ emoji → `AlertTriangleIcon` SVG |
+
+### Design tokens (shared, both pages)
+
+- **Card shadow:** rest `shadow-[0_1px_2px_rgba(15,23,42,0.04)]` → hover `shadow-[0_8px_24px_rgba(15,23,42,0.06)]`
+- **Hover lift:** `motion-safe:hover:-translate-y-0.5` (settled from Dashboard's `-translate-y-1`, up from Overview's 0)
+- **Motion timing:** `transition-all duration-200 ease-out` for hover; `duration-700 ease-out` for bar fills
+- Every animation gated behind `motion-safe:` (honours `prefers-reduced-motion`)
+- Every interactive element: `focus-visible:ring-2 focus-visible:ring-offset-1`
+
+### Verification (2026-06-09)
+
+- `pnpm exec tsc --noEmit -p apps/web` — **PASS**
+- Playwright smoke test: Dashboard and Overview — **0 console errors**
+- Manual: count-up animates on numeric MetricCard values; progress bars fill on mount; ACTIVE sprint card shows indigo ring + live dot; PLANNING cards show amber left-accent
 
 ---
 

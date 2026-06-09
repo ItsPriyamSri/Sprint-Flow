@@ -9,7 +9,29 @@ const env = (key: string, fallback?: string): string => {
   return val;
 };
 
+// Known weak/default passwords that must never reach production
+const WEAK_PASSWORDS = ['admin1234', 'password', 'password123', 'changeme', 'sprintflow'];
+
 async function main() {
+  // Hard block: never seed with default credentials in production.
+  // Real accounts will be seeded with explicit env vars or added manually.
+  if (process.env['NODE_ENV'] === 'production') {
+    const explicitPassword = process.env['SEED_ADMIN_PASSWORD'];
+    if (!explicitPassword) {
+      console.error('FATAL: Seed refused in production — SEED_ADMIN_PASSWORD is not set.');
+      console.error('       Set a strong explicit password or provision accounts manually.');
+      process.exit(1);
+    }
+    const isWeak =
+      explicitPassword.length < 12 ||
+      WEAK_PASSWORDS.some((w) => explicitPassword.toLowerCase().includes(w));
+    if (isWeak) {
+      console.error('FATAL: Seed refused in production — SEED_ADMIN_PASSWORD is too weak.');
+      console.error('       Use a random password ≥12 characters.');
+      process.exit(1);
+    }
+  }
+
   const adminEmail = env('SEED_ADMIN_EMAIL', 'admin@sprintflow.local');
   const adminPassword = env('SEED_ADMIN_PASSWORD', 'Admin1234!');
   const adminName = env('SEED_ADMIN_NAME', 'Alex');

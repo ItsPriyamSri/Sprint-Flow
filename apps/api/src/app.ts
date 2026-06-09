@@ -3,7 +3,9 @@ import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { rateLimit } from 'express-rate-limit';
+import pinoHttp from 'pino-http';
 import { env } from './lib/env';
+import { logger } from './lib/logger';
 import { errorHandler } from './middleware/error';
 import { healthRouter }     from './modules/health/health.routes';
 import { authRouter }       from './modules/auth/auth.routes';
@@ -20,6 +22,9 @@ export function createApp(): Express {
   const app = express();
   app.set('trust proxy', 1);
 
+  // Structured request logging — JSON in production, pretty in dev
+  app.use(pinoHttp({ logger }));
+
   // Security headers — disable CSP since this is a JSON API (not serving HTML)
   app.use(
     helmet({
@@ -27,7 +32,9 @@ export function createApp(): Express {
       crossOriginEmbedderPolicy: false,
     }),
   );
-  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+
+  // CORS: multi-origin list, required in production (throws at startup if unset via env.ts)
+  app.use(cors({ origin: env.CORS_ORIGINS, credentials: true }));
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
   app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false }));

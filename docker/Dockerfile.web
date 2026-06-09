@@ -4,12 +4,12 @@ WORKDIR /app
 
 RUN npm install -g pnpm@9
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/ui/package.json ./packages/ui/
 COPY apps/web/package.json ./apps/web/
 
-RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+RUN pnpm install --frozen-lockfile
 
 COPY packages/shared ./packages/shared
 COPY packages/ui ./packages/ui
@@ -17,6 +17,11 @@ COPY apps/web ./apps/web
 COPY tsconfig.base.json ./
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Public API URL is baked into the Next.js static bundle at build time.
+# Pass via: --build-arg NEXT_PUBLIC_API_URL=https://api.company.com/api/v1
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN pnpm --filter @sprintflow/web build
 

@@ -4,12 +4,12 @@ WORKDIR /app
 
 RUN npm install -g pnpm@9
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 
-RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+RUN pnpm install --frozen-lockfile
 
 COPY packages/db ./packages/db
 COPY packages/shared ./packages/shared
@@ -26,13 +26,16 @@ WORKDIR /app
 
 RUN npm install -g pnpm@9
 
+# Non-root user — least privilege, CIS Docker benchmark compliance
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 apiuser
+
 # Production deps — prisma CLI is in packages/db/dependencies so it's included
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/db/package.json     ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json        ./apps/api/
 
-RUN pnpm install --frozen-lockfile --prod 2>/dev/null || pnpm install --prod
+RUN pnpm install --frozen-lockfile --prod
 
 # Artefacts from builder
 COPY --from=builder /app/packages/db/generated  ./packages/db/generated
@@ -48,6 +51,10 @@ RUN chmod +x /entrypoint.sh
 
 ENV NODE_ENV=production
 EXPOSE 3001
-RUN mkdir -p /app/storage
+
+# Storage dir for local driver; chowned so apiuser can write
+RUN mkdir -p /app/storage && chown -R apiuser:nodejs /app/storage && chown -R apiuser:nodejs /app
+
+USER apiuser
 
 ENTRYPOINT ["/entrypoint.sh"]
