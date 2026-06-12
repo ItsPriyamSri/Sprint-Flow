@@ -87,7 +87,7 @@ export async function updateMapping(
 export async function commitImport(
   importId: string,
   workspaceId: string,
-  opts: { createSprints: boolean; createEpics: boolean; projectId?: string },
+  opts: { createSprints: boolean; createEpics: boolean; projectId?: string; newProjectName?: string },
 ): Promise<CommitResponse> {
   return apiFetch(`/imports/${importId}/commit?workspaceId=${workspaceId}`, {
     method: 'POST',

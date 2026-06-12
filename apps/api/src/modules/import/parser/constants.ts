@@ -7,7 +7,8 @@ export const FIELD_PATTERNS: Array<{ field: string; patterns: string[] }> = [
   { field: 'title',       patterns: ['taskstory', 'task', 'story', 'title', 'summary'] },
   { field: 'epicName',    patterns: ['epic', 'epicname', 'epiclabel'] },
   { field: 'ownerName',   patterns: ['owner', 'assignee', 'assignedto', 'responsible'] },
-  { field: 'hoursN',      patterns: ['hrsn', 'hoursn', 'hrsnormalized', 'estimated', 'estimate'] },
+  // hoursN: planned/estimated hours — covers "Hrs Est.", "Est Hrs", "Hrs Estimated", "Hours Est." etc.
+  { field: 'hoursN',      patterns: ['hrsn', 'hoursn', 'hrsnormalized', 'hrsest', 'hrsestimated', 'esthrs', 'esthours', 'estimated', 'estimate'] },
   { field: 'hoursI',      patterns: ['hrsi', 'hoursi', 'hoursincurred', 'actual', 'spent', 'incurred'] },
   { field: 'hoursTotal',  patterns: ['total', 'totalhours', 'totalhrs', 'hrs'] },
   { field: 'priority',    patterns: ['priority', 'prio', 'importance', 'urgency'] },
@@ -68,6 +69,7 @@ export const PRIORITY_MAP: Record<string, string> = {
   p1: 'P1',
   p2: 'P2',
   p3: 'P2', // treat P3 as P2 (no dedicated tier)
+  p4: 'P2', // treat P4 as P2 (low-priority tier)
   // Critical → P0
   critical: 'P0',
   crit: 'P0',

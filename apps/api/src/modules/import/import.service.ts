@@ -2,7 +2,7 @@ import { Prisma } from '@sprintflow/db';
 import { prisma } from '../../lib/prisma';
 import { storage } from '../../lib/storage';
 import { assertWorkspaceMember } from '../../lib/rbac';
-import { parseWorkbook, reparse, type ParseResult } from './parser';
+import { parseWorkbook, reparse, type ParseResult, type SprintMeta } from './parser';
 import { NotFoundError, ForbiddenError, AppError } from '../../lib/errors';
 
 // ─── Upload + Parse ──────────────────────────────────────────────────────────
@@ -134,7 +134,9 @@ export async function updateMapping(
 
 async function resolveImportProjectId(
   workspaceId: string,
+  actorId: string,
   optsProjectId?: string,
+  newProjectName?: string,
 ): Promise<string> {
   if (optsProjectId) {
     const project = await prisma.project.findFirst({
@@ -143,6 +145,21 @@ async function resolveImportProjectId(
     if (!project) {
       throw new AppError('BAD_REQUEST', 'Project not found in this workspace', 400);
     }
+    return project.id;
+  }
+
+  if (newProjectName) {
+    const project = await prisma.project.create({
+      data: {
+        workspaceId,
+        name: newProjectName.trim(),
+        daysPerSprint: 6,
+        daysPerWeek: 6,
+        members: {
+          create: { userId: actorId, role: 'LEAD', hoursPerDay: 6 },
+        },
+      },
+    });
     return project.id;
   }
 
@@ -164,6 +181,7 @@ async function resolveOrCreateSprintForImport(
   projectId: string,
   sprintName: string,
   sprintCache: Map<string, string>,
+  sprintMetaMap: Record<string, SprintMeta>,
 ): Promise<string> {
   // Normalize key so "Sprint 1" and "sprint 1" map to the same entry
   const cacheKey = sprintName.toLowerCase().trim();
@@ -173,22 +191,18 @@ async function resolveOrCreateSprintForImport(
   const existing = await tx.sprint.findFirst({
     where: {
       workspaceId,
+      projectId,
       name: { equals: sprintName.trim(), mode: 'insensitive' },
-      OR: [{ projectId: null }, { projectId }],
     },
     orderBy: { createdAt: 'asc' },
   });
 
   if (existing) {
-    if (!existing.projectId) {
-      await tx.sprint.update({
-        where: { id: existing.id },
-        data: { projectId },
-      });
-    }
     sprintCache.set(cacheKey, existing.id);
     return existing.id;
   }
+
+  const meta = sprintMetaMap[sprintName] ?? sprintMetaMap[cacheKey];
 
   // Deterministic id prevents duplicate creation on concurrent re-imports
   const sprintKey = `sprint-${projectId}-${cacheKey}`;
@@ -203,6 +217,9 @@ async function resolveOrCreateSprintForImport(
       status: 'PLANNING',
       days: 6,
       position: sprintCache.size * 1000,
+      ...(meta?.goal ? { goal: meta.goal } : {}),
+      ...(meta?.startDate ? { startDate: new Date(meta.startDate) } : {}),
+      ...(meta?.endDate ? { endDate: new Date(meta.endDate) } : {}),
     },
   });
   sprintCache.set(cacheKey, sprint.id);
@@ -213,7 +230,7 @@ export async function commitImport(
   importId: string,
   workspaceId: string,
   actorId: string,
-  opts: { createSprints: boolean; createEpics: boolean; projectId?: string },
+  opts: { createSprints: boolean; createEpics: boolean; projectId?: string; newProjectName?: string },
 ) {
   const imp = await getImportOrThrow(importId, workspaceId, actorId);
   if (imp.status === 'COMMITTED') {
@@ -224,7 +241,7 @@ export async function commitImport(
   }
 
   await assertWorkspaceMember(actorId, workspaceId, 'MEMBER');
-  const projectId = await resolveImportProjectId(workspaceId, opts.projectId);
+  const projectId = await resolveImportProjectId(workspaceId, actorId, opts.projectId, opts.newProjectName);
 
   const rows = await prisma.importRow.findMany({
     where: { importId, status: { in: ['VALID', 'WARNING'] } },
@@ -240,6 +257,10 @@ export async function commitImport(
 
   const colByKey = new Map(board.columns.map((c) => [c.key, c.id]));
   const fallbackColId = board.columns[0]?.id ?? '';
+
+  // Sprint metadata (goals + dates) extracted during parse and stored in imp.stats
+  const sprintMeta =
+    ((imp.stats as Record<string, unknown>)?.sprintMeta as Record<string, SprintMeta> | undefined) ?? {};
 
   // Caches to avoid repeated lookups within a single commit
   const sprintCache = new Map<string, string>(); // name → id
@@ -282,6 +303,7 @@ export async function commitImport(
             projectId,
             norm.sprintName,
             sprintCache,
+            sprintMeta,
           );
         }
 
@@ -546,5 +568,6 @@ function serializeStats(result: ParseResult) {
     sprints: result.stats.sprints.size,
     epics: result.stats.epics.size,
     owners: result.stats.owners.size,
+    sprintMeta: result.sprintMeta as unknown as Prisma.InputJsonValue,
   };
 }

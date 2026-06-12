@@ -79,7 +79,14 @@ export function ImportWizard() {
 
   // Step 3 → commit
   const commitMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (newProjectName?: string) => {
+      if (newProjectName) {
+        return commitImport(upload!.importId, requireWorkspaceId(), {
+          createSprints: true,
+          createEpics: true,
+          newProjectName,
+        });
+      }
       const projectId = resolveProjectId();
       if (!projectId) {
         throw new Error('Create or select a project before importing.');
@@ -170,7 +177,7 @@ export function ImportWizard() {
             preview={preview}
             targetProjectName={targetProject?.name ?? null}
             canCommit={!!resolveProjectId()}
-            onCommit={() => commitMutation.mutate()}
+            onCommit={(newProjectName) => commitMutation.mutate(newProjectName)}
             onBack={() => { setStep(2); clearError(); }}
             loading={commitMutation.isPending}
             error={error}

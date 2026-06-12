@@ -23,7 +23,7 @@ boardsRouter.get('/:boardId', async (req, res, next) => {
     const isMember = board.workspace.members.some((m) => m.userId === req.user!.id);
     if (!isMember) throw new ForbiddenError('Not a workspace member');
 
-    const { sprint, epic, priority } = req.query as Record<string, string | undefined>;
+    const { sprint, epic, priority, project: projectId } = req.query as Record<string, string | undefined>;
 
     const columns = await prisma.boardColumn.findMany({
       where: { boardId },
@@ -32,9 +32,10 @@ boardsRouter.get('/:boardId', async (req, res, next) => {
         tasks: {
           where: {
             boardId,
-            ...(sprint   ? { sprintId: sprint }                   : {}),
-            ...(epic     ? { epicId:   epic }                     : {}),
-            ...(priority ? { priority: priority as 'P0' | 'P1' | 'P2' } : {}),
+            ...(projectId ? { projectId }                              : {}),
+            ...(sprint    ? { sprintId: sprint }                       : {}),
+            ...(epic      ? { epicId:   epic }                         : {}),
+            ...(priority  ? { priority: priority as 'P0' | 'P1' | 'P2' } : {}),
           },
           orderBy: { position: 'asc' },
           include: {

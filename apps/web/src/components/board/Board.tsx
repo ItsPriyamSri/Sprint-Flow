@@ -34,6 +34,7 @@ import { moveTask } from '@/lib/api/tasks';
 import { useBoardStore } from '@/store/board.store';
 import { confirm } from '@/store/confirm.store';
 import { useAuthStore } from '@/store/auth.store';
+import { useProjectStore } from '@/store/project.store';
 import { BoardColumn } from './BoardColumn';
 import { DragOverlayCard } from './DragOverlayCard';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
@@ -47,6 +48,7 @@ interface Props {
 
 export function Board({ boardId }: Props) {
   const authWorkspaceId = useAuthStore((s) => s.defaultWorkspaceId);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const { openTask, activeView, filters } = useBoardStore();
   const queryClient = useQueryClient();
   const [activeDragTask,   setActiveDragTask]   = useState<BoardTask | null>(null);
@@ -55,9 +57,13 @@ export function Board({ boardId }: Props) {
   const [addingCol, setAddingCol]   = useState(false);
   const dragOriginRef = useRef<{ columnId: string; position: number } | null>(null);
 
-  // Strip undefined values so the query key is stable and params are clean
+  // Always scope the board to the active project so tasks from other projects
+  // never bleed into this view.
   const filterParams = Object.fromEntries(
-    Object.entries(filters).filter(([, v]) => v !== undefined) as [string, string][],
+    Object.entries({
+      ...filters,
+      ...(activeProjectId ? { project: activeProjectId } : {}),
+    }).filter(([, v]) => v !== undefined) as [string, string][],
   );
 
   // ── Data ──────────────────────────────────────────────────────────────────

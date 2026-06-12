@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createSprint } from '@/lib/api/sprints';
 import { Button } from '@sprintflow/ui';
 import { Spinner } from '@sprintflow/ui';
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function SprintCreateModal({ isOpen, onClose, workspaceId, projectId, onSuccess }: Props) {
+  const router = useRouter();
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [days, setDays] = useState(6);
@@ -84,14 +86,26 @@ export function SprintCreateModal({ isOpen, onClose, workspaceId, projectId, onS
             </svg>
             Create New Sprint
           </h3>
-          <button 
-            onClick={onClose}
-            className="rounded-full p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { onClose(); router.push('/import'); }}
+              className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Import from sheet
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-full p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">

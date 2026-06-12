@@ -137,7 +137,7 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
     const allSprintIds = project.sprints.map((s) => s.id);
 
     const allTasks = await prisma.task.findMany({
-      where: { sprintId: { in: allSprintIds } },
+      where: { projectId, sprintId: { in: allSprintIds } },
       select: {
         id: true, sprintId: true, priority: true, done: true, blocked: true, updatedAt: true,
         assignments: { select: { projectMemberId: true, hours: true } },
@@ -294,7 +294,7 @@ projectsRouter.post(
         userId: z.string(),
         role: z.enum(['LEAD', 'MEMBER', 'VIEWER']).default('MEMBER'),
         hoursPerDay: z.number().min(0.5).max(24).default(6),
-      })).min(1),
+      })).min(0),
       sprints: z.array(z.object({
         name: z.string().min(1).max(200),
         goal: z.string().max(500).optional(),

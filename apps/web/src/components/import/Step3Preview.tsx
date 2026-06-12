@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { ImportRow, PreviewResponse } from '@/lib/api/import';
 
 const STATUS_STYLES = {
@@ -114,7 +114,7 @@ interface Props {
   preview: PreviewResponse;
   targetProjectName?: string | null;
   canCommit?: boolean;
-  onCommit: () => void;
+  onCommit: (newProjectName?: string) => void;
   onBack: () => void;
   loading: boolean;
   error?: string | null;
@@ -132,6 +132,11 @@ export function Step3Preview({
   error,
 }: Props) {
   const [filter, setFilter] = useState<FilterKey>('ALL');
+  const [projectMode, setProjectMode] = useState<'existing' | 'new'>(
+    canCommitProject ? 'existing' : 'new',
+  );
+  const [newProjectName, setNewProjectName] = useState('');
+  const newProjectInputRef = useRef<HTMLInputElement>(null);
   const stats = preview.import.stats;
 
   const displayRows = preview.rows.filter(
@@ -139,7 +144,9 @@ export function Step3Preview({
   );
 
   const hasRows = (stats?.valid ?? 0) + (stats?.warnings ?? 0) > 0;
-  const canCommit = hasRows && canCommitProject;
+  const projectReady =
+    projectMode === 'existing' ? canCommitProject : newProjectName.trim().length > 0;
+  const canCommit = hasRows && projectReady;
   const sprintCount = typeof stats?.sprints === 'number' ? stats.sprints : 0;
   const epicCount = typeof stats?.epics === 'number' ? stats.epics : 0;
   const ownerCount = typeof stats?.owners === 'number' ? stats.owners : 0;
@@ -151,14 +158,52 @@ export function Step3Preview({
         <p className="mt-1 text-sm text-slate-500">
           Review the rows below before committing. Errors will be skipped; warnings are imported with a flag.
         </p>
-        {targetProjectName ? (
-          <p className="mt-2 text-sm text-slate-600">
-            Importing into: <span className="font-semibold text-indigo-700">{targetProjectName}</span>
-          </p>
-        ) : (
-          <p className="mt-2 text-sm text-amber-700">
-            No project available — create a project before importing.
-          </p>
+      </div>
+
+      {/* Project target */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Import destination</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={!canCommitProject}
+            onClick={() => setProjectMode('existing')}
+            className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              projectMode === 'existing'
+                ? 'border-indigo-500 bg-white text-indigo-700 shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed'
+            }`}
+          >
+            {targetProjectName ? (
+              <span>Use <span className="font-semibold">{targetProjectName}</span></span>
+            ) : (
+              <span className="text-slate-400">No existing project</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setProjectMode('new');
+              setTimeout(() => newProjectInputRef.current?.focus(), 50);
+            }}
+            className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              projectMode === 'new'
+                ? 'border-indigo-500 bg-white text-indigo-700 shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+            }`}
+          >
+            + Create new project
+          </button>
+        </div>
+        {projectMode === 'new' && (
+          <input
+            ref={newProjectInputRef}
+            type="text"
+            placeholder="New project name"
+            value={newProjectName}
+            onChange={(e) => setNewProjectName(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+          />
         )}
       </div>
 
@@ -269,7 +314,7 @@ export function Step3Preview({
           ← Edit mapping
         </button>
         <button
-          onClick={onCommit}
+          onClick={() => onCommit(projectMode === 'new' ? newProjectName.trim() : undefined)}
           disabled={!canCommit || loading}
           className="flex-[2] rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
         >

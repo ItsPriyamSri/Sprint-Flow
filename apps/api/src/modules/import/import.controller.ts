@@ -104,11 +104,12 @@ export async function commit(req: Request, res: Response, next: NextFunction) {
   try {
     const { importId } = req.params as { importId: string };
     const workspaceId = getWorkspaceId(req);
-    const { createSprints = true, createEpics = true, projectId } = z
+    const { createSprints = true, createEpics = true, projectId, newProjectName } = z
       .object({
         createSprints: z.boolean().default(true),
         createEpics: z.boolean().default(true),
         projectId: z.string().optional(),
+        newProjectName: z.string().min(1).max(200).optional(),
       })
       .parse(req.body ?? {});
 
@@ -116,6 +117,7 @@ export async function commit(req: Request, res: Response, next: NextFunction) {
       createSprints,
       createEpics,
       projectId,
+      newProjectName,
     });
     res.json(result);
   } catch (e) {
