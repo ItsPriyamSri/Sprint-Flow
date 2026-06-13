@@ -1,4 +1,8 @@
-export const GlobalRole = { ADMIN: 'ADMIN', MEMBER: 'MEMBER' } as const;
+export const GlobalRole = {
+  SUPER_ADMIN: 'SUPER_ADMIN',
+  ADMIN: 'ADMIN', // orphaned — do not use for new logic; see SUPER_ADMIN
+  MEMBER: 'MEMBER',
+} as const;
 export type GlobalRole = (typeof GlobalRole)[keyof typeof GlobalRole];
 
 export const WorkspaceRole = {

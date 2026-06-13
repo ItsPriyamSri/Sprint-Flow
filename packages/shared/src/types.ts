@@ -21,7 +21,14 @@ export interface UserDto {
   name: string;
   role: string;
   status: string;
+  mustChangePassword?: boolean;
   createdAt: string;
+}
+
+export interface ProjectMembershipDto {
+  projectId: string;
+  projectName: string;
+  role: string; // ProjectRole
 }
 
 export interface WorkspaceDto {
@@ -254,8 +261,8 @@ export interface MyWorkDto {
   currentSprintTasks: MyWorkTaskDto[];
   upcomingTasks: MyWorkTaskDto[];
   daysRemaining: number;
-  isAdmin: boolean;
-  allMembersWork?: MemberWorkSummaryDto[]; // only present for admin users
+  isLead: boolean;
+  allMembersWork?: MemberWorkSummaryDto[]; // only present for lead/super-admin users
 }
 
 // ─── Team View DTOs ───────────────────────────────────────────────────────────

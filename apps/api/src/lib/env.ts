@@ -35,4 +35,10 @@ export const env = {
   // S3 — only required when STORAGE_DRIVER=s3
   S3_BUCKET: process.env['S3_BUCKET'] ?? '',
   S3_REGION: process.env['S3_REGION'] ?? '',
+  // Auth / RBAC
+  ALLOWED_EMAIL_DOMAINS: opt('ALLOWED_EMAIL_DOMAINS', ''),
+  DEFAULT_MEMBER_PASSWORD: process.env['DEFAULT_MEMBER_PASSWORD'] ?? '',
+  SUPER_ADMIN_EMAILS: opt('SUPER_ADMIN_EMAILS', ''),
+  DEFAULT_WORKSPACE_SLUG: process.env['DEFAULT_WORKSPACE_SLUG'] ?? '',
+  DEFAULT_PROJECT_ID: process.env['DEFAULT_PROJECT_ID'] ?? '',
 } as const;

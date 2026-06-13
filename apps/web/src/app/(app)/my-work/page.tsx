@@ -295,24 +295,24 @@ function MemberWorkSection({ memberWork }: { memberWork: MemberWorkSummaryDto })
 // ─── Main content ─────────────────────────────────────────────────────────────
 
 function MyWorkContent({ data }: { data: MyWorkDto }) {
-  const isAdmin = data.isAdmin;
+  const isLead = data.isLead;
   const allMembersWork = data.allMembersWork ?? [];
 
   const totalMyTasks = data.currentSprintTasks.length;
   const doneMyTasks  = data.currentSprintTasks.filter((t) => t.done).length;
   const myRate       = totalMyTasks > 0 ? Math.round((doneMyTasks / totalMyTasks) * 100) : 0;
 
-  const adminTotal = isAdmin
+  const adminTotal = isLead
     ? allMembersWork.reduce((s, m) => s + m.currentSprintTasks.length, 0)
     : totalMyTasks;
-  const adminDone = isAdmin
+  const adminDone = isLead
     ? allMembersWork.reduce((s, m) => s + m.currentSprintTasks.filter((t) => t.done).length, 0)
     : doneMyTasks;
   const adminRate = adminTotal > 0 ? Math.round((adminDone / adminTotal) * 100) : 0;
 
-  const displayTotal = isAdmin ? adminTotal : totalMyTasks;
-  const displayDone  = isAdmin ? adminDone  : doneMyTasks;
-  const displayRate  = isAdmin ? adminRate  : myRate;
+  const displayTotal = isLead ? adminTotal : totalMyTasks;
+  const displayDone  = isLead ? adminDone  : doneMyTasks;
+  const displayRate  = isLead ? adminRate  : myRate;
 
   const myInProgress = data.currentSprintTasks.filter((t) => !t.done && getColStatus(t) === 'in-progress').length;
   const myBlocked    = data.currentSprintTasks.filter((t) => t.blocked && !t.done).length;
@@ -330,11 +330,11 @@ function MyWorkContent({ data }: { data: MyWorkDto }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-black tracking-tight text-slate-900">
-                  {isAdmin ? 'Team Work' : 'My Work'}
+                  {isLead ? 'Team Work' : 'My Work'}
                 </h1>
-                {isAdmin && (
+                {isLead && (
                   <span className="flex-shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-indigo-600">
-                    Admin
+                    Lead
                   </span>
                 )}
               </div>
@@ -350,13 +350,13 @@ function MyWorkContent({ data }: { data: MyWorkDto }) {
 
           {/* Right: stats row */}
           <div className="flex flex-shrink-0 items-center gap-3">
-            {!isAdmin && myInProgress > 0 && (
+            {!isLead && myInProgress > 0 && (
               <div className="hidden items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 sm:flex">
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
                 <span className="text-xs font-bold text-blue-700">{myInProgress} active</span>
               </div>
             )}
-            {!isAdmin && myBlocked > 0 && (
+            {!isLead && myBlocked > 0 && (
               <div className="hidden items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 sm:flex">
                 <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                 <span className="text-xs font-bold text-rose-700">{myBlocked} blocked</span>
@@ -392,7 +392,7 @@ function MyWorkContent({ data }: { data: MyWorkDto }) {
 
       {/* ── Body ── */}
       <div className="flex-1 px-8 py-8 w-full max-w-[1400px] mx-auto">
-        {isAdmin ? (
+        {isLead ? (
           <div className="space-y-6">
             {allMembersWork.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-400">No team members found in this project.</p>

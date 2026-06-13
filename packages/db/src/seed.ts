@@ -12,21 +12,23 @@ const env = (key: string, fallback?: string): string => {
 // Known weak/default passwords that must never reach production
 const WEAK_PASSWORDS = ['admin1234', 'password', 'password123', 'changeme', 'sprintflow'];
 
+function isWeakPassword(pw: string): boolean {
+  return pw.length < 12 || WEAK_PASSWORDS.some((w) => pw.toLowerCase().includes(w));
+}
+
+const isProduction = process.env['NODE_ENV'] === 'production';
+
 async function main() {
   // Hard block: never seed with default credentials in production.
-  // Real accounts will be seeded with explicit env vars or added manually.
-  if (process.env['NODE_ENV'] === 'production') {
-    const explicitPassword = process.env['SEED_ADMIN_PASSWORD'];
+  if (isProduction) {
+    const explicitPassword = process.env['SEED_SUPER_ADMIN_PASSWORD'] ?? process.env['SEED_ADMIN_PASSWORD'];
     if (!explicitPassword) {
-      console.error('FATAL: Seed refused in production — SEED_ADMIN_PASSWORD is not set.');
+      console.error('FATAL: Seed refused in production — SEED_SUPER_ADMIN_PASSWORD is not set.');
       console.error('       Set a strong explicit password or provision accounts manually.');
       process.exit(1);
     }
-    const isWeak =
-      explicitPassword.length < 12 ||
-      WEAK_PASSWORDS.some((w) => explicitPassword.toLowerCase().includes(w));
-    if (isWeak) {
-      console.error('FATAL: Seed refused in production — SEED_ADMIN_PASSWORD is too weak.');
+    if (isWeakPassword(explicitPassword)) {
+      console.error('FATAL: Seed refused in production — SEED_SUPER_ADMIN_PASSWORD is too weak.');
       console.error('       Use a random password ≥12 characters.');
       process.exit(1);
     }
@@ -39,34 +41,6 @@ async function main() {
 
   console.log('🌱 Seeding SprintFlow...');
 
-  const passwordHash = await argon2.hash(adminPassword);
-
-  // ── Admin user ──────────────────────────────────────────────────────────────
-  const admin = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {},
-    create: {
-      email: adminEmail,
-      name: adminName,
-      passwordHash,
-      role: GlobalRole.ADMIN,
-    },
-  });
-  console.log(`  ✓ Admin user: ${admin.email}`);
-
-  // Demo team members
-  const irisUser = await prisma.user.upsert({
-    where: { email: 'iris@sprintflow.local' },
-    update: {},
-    create: { email: 'iris@sprintflow.local', name: 'Iris', passwordHash, role: GlobalRole.MEMBER },
-  });
-  const nateUser = await prisma.user.upsert({
-    where: { email: 'nate@sprintflow.local' },
-    update: {},
-    create: { email: 'nate@sprintflow.local', name: 'Nate', passwordHash, role: GlobalRole.MEMBER },
-  });
-  console.log('  ✓ Demo team: Iris, Nate');
-
   // ── Workspace ───────────────────────────────────────────────────────────────
   const slug = workspaceName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   const workspace = await prisma.workspace.upsert({
@@ -76,16 +50,94 @@ async function main() {
   });
   console.log(`  ✓ Workspace: ${workspace.name}`);
 
-  for (const u of [admin, irisUser, nateUser]) {
-    await prisma.workspaceMember.upsert({
-      where: { userId_workspaceId: { userId: u.id, workspaceId: workspace.id } },
-      update: {},
+  // ── Super Admin user (dev default) ─────────────────────────────────────────
+  const adminPasswordHash = await argon2.hash(adminPassword);
+
+  const admin = await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: { role: GlobalRole.SUPER_ADMIN },
+    create: {
+      email: adminEmail,
+      name: adminName,
+      passwordHash: adminPasswordHash,
+      role: GlobalRole.SUPER_ADMIN,
+    },
+  });
+  console.log(`  ✓ Super admin: ${admin.email}`);
+
+  await prisma.workspaceMember.upsert({
+    where: { userId_workspaceId: { userId: admin.id, workspaceId: workspace.id } },
+    update: { role: WorkspaceRole.OWNER },
+    create: { userId: admin.id, workspaceId: workspace.id, role: WorkspaceRole.OWNER },
+  });
+
+  // ── Env-configured super admins (production accounts) ──────────────────────
+  const superAdminEmails = (process.env['SUPER_ADMIN_EMAILS'] ?? '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean)
+    .filter((e) => e !== adminEmail); // skip if already handled above
+
+  const superAdminPassword = process.env['SEED_SUPER_ADMIN_PASSWORD'] ?? adminPassword;
+  const superAdminHash = superAdminPassword !== adminPassword
+    ? await argon2.hash(superAdminPassword)
+    : adminPasswordHash;
+
+  for (const email of superAdminEmails) {
+    const nameParts = email.split('@')[0]!.split(/[._]/).map((p) => p.charAt(0).toUpperCase() + p.slice(1));
+    const name = nameParts.join(' ');
+
+    const sa = await prisma.user.upsert({
+      where: { email },
+      update: { role: GlobalRole.SUPER_ADMIN },
       create: {
-        userId: u.id,
-        workspaceId: workspace.id,
-        role: u.id === admin.id ? WorkspaceRole.OWNER : WorkspaceRole.MEMBER,
+        email,
+        name,
+        passwordHash: superAdminHash,
+        role: GlobalRole.SUPER_ADMIN,
+        status: 'ACTIVE',
       },
     });
+
+    await prisma.workspaceMember.upsert({
+      where: { userId_workspaceId: { userId: sa.id, workspaceId: workspace.id } },
+      update: { role: WorkspaceRole.OWNER },
+      create: { userId: sa.id, workspaceId: workspace.id, role: WorkspaceRole.OWNER },
+    });
+
+    console.log(`  ✓ Super admin (env): ${sa.email}`);
+  }
+
+  // ── Demo team members — dev/staging only ───────────────────────────────────
+  let irisUser: { id: string } | null = null;
+  let nateUser: { id: string } | null = null;
+
+  if (!isProduction) {
+    irisUser = await prisma.user.upsert({
+      where: { email: 'iris@sprintflow.local' },
+      update: {},
+      create: { email: 'iris@sprintflow.local', name: 'Iris', passwordHash: adminPasswordHash, role: GlobalRole.MEMBER },
+    });
+    nateUser = await prisma.user.upsert({
+      where: { email: 'nate@sprintflow.local' },
+      update: {},
+      create: { email: 'nate@sprintflow.local', name: 'Nate', passwordHash: adminPasswordHash, role: GlobalRole.MEMBER },
+    });
+    console.log('  ✓ Demo team: Iris, Nate');
+
+    for (const u of [irisUser, nateUser]) {
+      await prisma.workspaceMember.upsert({
+        where: { userId_workspaceId: { userId: u.id, workspaceId: workspace.id } },
+        update: {},
+        create: { userId: u.id, workspaceId: workspace.id, role: WorkspaceRole.MEMBER },
+      });
+    }
+  }
+
+  if (isProduction) {
+    console.log('\n✅ Production seed complete (demo data skipped).');
+    console.log(`   Workspace ID: ${workspace.id}`);
+    return;
   }
 
   // ── Board (Kanban flow view) ──────────────────────────────────────────────────
@@ -129,20 +181,24 @@ async function main() {
   });
   console.log(`  ✓ Project: ${project.name}`);
 
-  // Project members (Iris = lead, Nate = member, 6 hrs/day each; admin is manager, not a member)
+  // Project members (Iris = lead, Nate = member; super admin is not a project member)
   const pmIrisId = `pm-iris-${projectId}`;
   const pmNateId = `pm-nate-${projectId}`;
 
-  await prisma.projectMember.upsert({
-    where: { id: pmIrisId },
-    update: {},
-    create: { id: pmIrisId, projectId: project.id, userId: irisUser.id, role: ProjectRole.LEAD, hoursPerDay: 6 },
-  });
-  await prisma.projectMember.upsert({
-    where: { id: pmNateId },
-    update: {},
-    create: { id: pmNateId, projectId: project.id, userId: nateUser.id, role: ProjectRole.MEMBER, hoursPerDay: 6 },
-  });
+  if (irisUser) {
+    await prisma.projectMember.upsert({
+      where: { id: pmIrisId },
+      update: {},
+      create: { id: pmIrisId, projectId: project.id, userId: irisUser.id, role: ProjectRole.LEAD, hoursPerDay: 6 },
+    });
+  }
+  if (nateUser) {
+    await prisma.projectMember.upsert({
+      where: { id: pmNateId },
+      update: {},
+      create: { id: pmNateId, projectId: project.id, userId: nateUser.id, role: ProjectRole.MEMBER, hoursPerDay: 6 },
+    });
+  }
   console.log(`  ✓ Project members: Iris (lead), Nate`);
 
   // ── Epics ────────────────────────────────────────────────────────────────────
@@ -228,7 +284,6 @@ async function main() {
   console.log(`  ✓ Sprints: Sprint 1 (active), Sprint 2, Sprint 3 (release)`);
 
   // ── Tasks ────────────────────────────────────────────────────────────────────
-  // Sprint 1 tasks — already partially planned to demonstrate budget/buffer
   const sprint1Id = sprintMap['Sprint 1']!;
   const sprint2Id = sprintMap['Sprint 2']!;
   const colInProgress = colMap['in_progress']!;
@@ -279,7 +334,6 @@ async function main() {
     });
     pos += 1000;
 
-    // Seed task assignments
     for (const a of t.assignments) {
       await prisma.taskAssignment.upsert({
         where: { taskId_projectMemberId: { taskId: task.id, projectMemberId: a.pm } },
@@ -295,9 +349,9 @@ async function main() {
   console.log(`   Workspace ID: ${workspace.id}`);
   console.log(`   Project ID:   ${project.id}`);
   console.log(`   Board ID:     ${board.id}`);
-  console.log('\n   Team logins:');
-  console.log(`   iris@sprintflow.local / Admin1234!`);
-  console.log(`   nate@sprintflow.local / Admin1234!`);
+  console.log('\n   Demo logins:');
+  console.log(`   iris@sprintflow.local / ${adminPassword}`);
+  console.log(`   nate@sprintflow.local / ${adminPassword}`);
 }
 
 main()

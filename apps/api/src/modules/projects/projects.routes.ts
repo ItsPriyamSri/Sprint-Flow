@@ -818,9 +818,11 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       })
       .map(taskToDto);
 
-    const isAdmin = req.user!.role === 'ADMIN';
+    const isLead =
+      req.user!.role === 'SUPER_ADMIN' ||
+      (projectMember != null && projectMember.role === 'LEAD');
 
-    // Admin sees all members' work grouped by person
+    // Lead/Super Admin sees all members' work grouped by person
     let allMembersWork: {
       member: ReturnType<typeof memberDto>;
       todayFocus: ReturnType<typeof taskToDto>[];
@@ -828,9 +830,9 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       upcomingTasks: ReturnType<typeof taskToDto>[];
     }[] | undefined;
 
-    if (isAdmin) {
+    if (isLead) {
       const allProjectMembers = await prisma.projectMember.findMany({
-        where: { projectId, user: { role: { not: 'ADMIN' } } },
+        where: { projectId, user: { role: { not: 'SUPER_ADMIN' } } },
         include: { user: { select: { id: true, name: true, email: true, status: true } } },
       });
 
@@ -873,23 +875,23 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       );
     }
 
-    // For admins without a ProjectMember row, build a stub member DTO from their user record
+    // For super-admins without a ProjectMember row, build a stub member DTO from their user record
     let memberResponse: ReturnType<typeof memberDto>;
     if (projectMember) {
       memberResponse = memberDto({ ...projectMember, user: projectMember.user });
     } else {
-      const adminUser = await prisma.user.findUniqueOrThrow({
+      const superAdminUser = await prisma.user.findUniqueOrThrow({
         where: { id: req.user!.id },
         select: { id: true, name: true, email: true, status: true },
       });
       memberResponse = {
         id: '',
-        userId: adminUser.id,
-        name: adminUser.name,
-        email: adminUser.email,
-        role: 'ADMIN',
+        userId: superAdminUser.id,
+        name: superAdminUser.name,
+        email: superAdminUser.email,
+        role: 'SUPER_ADMIN',
         hoursPerDay: 0,
-        status: adminUser.status,
+        status: superAdminUser.status,
       };
     }
 
@@ -912,7 +914,7 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       currentSprintTasks,
       upcomingTasks,
       daysRemaining,
-      isAdmin,
+      isLead,
       allMembersWork,
     });
   } catch (e) { next(e); }

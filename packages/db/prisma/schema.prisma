@@ -11,7 +11,8 @@ datasource db {
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum GlobalRole {
-  ADMIN
+  SUPER_ADMIN
+  ADMIN // orphaned — do not use for new logic; see SUPER_ADMIN
   MEMBER
 }
 
@@ -81,19 +82,24 @@ enum ActivityAction {
   COLUMN_ADDED
   COLUMN_REORDERED
   PROJECT_CREATED
+  USER_ROLE_CHANGED
+  USER_DEACTIVATED
+  PASSWORD_RESET
+  USER_PROVISIONED
 }
 
 // ─── Users & Auth ────────────────────────────────────────────────────────────
 
 model User {
-  id           String     @id @default(cuid())
-  email        String?    @unique // null for UNCLAIMED stubs
-  name         String
-  passwordHash String? // null for UNCLAIMED / INVITED
-  role         GlobalRole @default(MEMBER)
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                 String     @id @default(cuid())
+  email              String?    @unique // null for UNCLAIMED stubs
+  name               String
+  passwordHash       String? // null for UNCLAIMED / INVITED
+  role               GlobalRole @default(MEMBER)
+  status             UserStatus @default(ACTIVE)
+  mustChangePassword Boolean    @default(false)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   memberships       WorkspaceMember[]
   projectMemberships ProjectMember[]
