@@ -37,13 +37,13 @@ Update this section as you work:
 
 | Phase | Status | Commit hash | Gate |
 |-------|--------|-------------|------|
-| A — Schema & foundation | ✅ done | TBD | ✅ all pass |
-| B — Permission engine | ⬜ pending | | |
+| A — Schema & foundation | ✅ done | 924a6da | ✅ all pass |
+| B — Permission engine | ✅ done | (pending commit) | ✅ tsc all pass |
 | C — Auth & admin API | ⬜ pending | | |
 | D — Frontend | ⬜ pending | | |
 | E — Hardening | ⬜ pending | | |
 
-**Current phase:** B
+**Current phase:** C
 
 ---
 

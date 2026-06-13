@@ -2,6 +2,7 @@ import { Prisma } from '@sprintflow/db';
 import { prisma } from '../../lib/prisma';
 import { assertWorkspaceMember } from '../../lib/rbac';
 import { NotFoundError, ForbiddenError } from '../../lib/errors';
+import { can, assertCan } from '../../lib/permissions';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,7 @@ const TASK_INCLUDE = {
 
 export async function createTask(actorId: string, input: CreateTaskInput) {
   await assertWorkspaceMember(actorId, input.workspaceId, 'MEMBER');
+  await assertCan(actorId, 'task:create', { workspaceId: input.workspaceId, projectId: input.projectId });
   const position = await getLastPosition(input.columnId);
 
   const task = await prisma.task.create({
@@ -161,6 +163,11 @@ export async function getTask(taskId: string, workspaceId: string, userId: strin
   return task;
 }
 
+// Workflow-only keys members can update on assigned tasks
+const WORKFLOW_KEYS: Array<keyof UpdateTaskInput> = [
+  'done', 'blocked', 'blockedReason', 'deferred', 'deferredReason', 'columnId',
+];
+
 export async function updateTask(
   taskId: string,
   workspaceId: string,
@@ -168,6 +175,16 @@ export async function updateTask(
   input: UpdateTaskInput,
 ) {
   const old = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
+
+  // Field-split: any non-workflow key requires task:edit_meta (lead+)
+  const hasMetaKeys = (Object.keys(input) as Array<keyof UpdateTaskInput>).some(
+    (k) => !WORKFLOW_KEYS.includes(k),
+  );
+  if (hasMetaKeys) {
+    await assertCan(actorId, 'task:edit_meta', { workspaceId, projectId: old.projectId, taskId });
+  } else {
+    await assertCan(actorId, 'task:workflow', { workspaceId, projectId: old.projectId, taskId });
+  }
 
   const DONE_COL = /^(done|completed|finished)$/i;
 
@@ -245,6 +262,7 @@ export async function moveTask(
   move: { columnId: string; position: number },
 ) {
   const old = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
+  await assertCan(actorId, 'task:workflow', { workspaceId, projectId: old.projectId, taskId });
 
   const updated = await prisma.task.update({
     where: { id: taskId },
@@ -292,6 +310,7 @@ export async function moveTask(
 
 export async function deleteTask(taskId: string, workspaceId: string, actorId: string) {
   const task = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
+  await assertCan(actorId, 'task:delete', { workspaceId, projectId: task.projectId });
   await prisma.task.delete({ where: { id: taskId } });
 
   await prisma.activityLog.create({
@@ -316,6 +335,7 @@ export async function upsertAssignment(
   hours: number,
 ) {
   const task = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
+  await assertCan(actorId, 'task:assign', { workspaceId, projectId: task.projectId });
 
   const member = await prisma.projectMember.findUnique({ where: { id: projectMemberId } });
   if (!member) throw new NotFoundError('Project member');
@@ -336,7 +356,8 @@ export async function removeAssignment(
   actorId: string,
   projectMemberId: string,
 ) {
-  await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
+  const task = await assertTaskAccess(taskId, workspaceId, actorId, 'MEMBER');
+  await assertCan(actorId, 'task:assign', { workspaceId, projectId: task.projectId });
 
   await prisma.taskAssignment.deleteMany({
     where: { taskId, projectMemberId },
@@ -402,13 +423,11 @@ export async function deleteComment(
   if (!comment) throw new NotFoundError('Comment');
   if (comment.taskId !== taskId) throw new ForbiddenError('Comment does not belong to this task');
 
-  const membership = await prisma.workspaceMember.findUnique({
-    where: { userId_workspaceId: { userId: actorId, workspaceId } },
-  });
-  const isAdminOrOwner = membership && (membership.role === 'ADMIN' || membership.role === 'OWNER');
-
-  if (comment.authorId !== actorId && !isAdminOrOwner) {
-    throw new ForbiddenError('You do not have permission to delete this comment');
+  // Author can always delete their own comment; otherwise requires lead+/ws-admin
+  if (comment.authorId !== actorId) {
+    const task = await prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
+    const allowed = await can(actorId, 'task:comment_delete', { workspaceId, projectId: task?.projectId });
+    if (!allowed) throw new ForbiddenError('You do not have permission to delete this comment');
   }
 
   await prisma.comment.delete({ where: { id: commentId } });

@@ -6,6 +6,7 @@ import { prisma } from '../../lib/prisma';
 import { Prisma } from '@sprintflow/db';
 import { assertWorkspaceMember } from '../../lib/rbac';
 import { AppError, NotFoundError, ForbiddenError, ConflictError } from '../../lib/errors';
+import { assertCan, rosterExclusionWhere } from '../../lib/permissions';
 import type { Request, Response, NextFunction } from 'express';
 
 export const sprintsRouter: IRouter = Router();
@@ -77,7 +78,7 @@ sprintsRouter.get('/:sprintId/board', async (req: Request, res: Response, next: 
           select: {
             id: true, daysPerWeek: true,
             members: {
-              where: { user: { role: { not: 'ADMIN' } } },
+              where: rosterExclusionWhere,
               include: {
                 user: { select: { id: true, name: true, email: true, status: true } },
               },
@@ -223,6 +224,7 @@ sprintsRouter.post(
         releaseMilestone?: boolean; releaseLabel?: string; releaseDate?: string;
       };
       await assertWorkspaceMember(req.user!.id, body.workspaceId, 'MEMBER');
+      await assertCan(req.user!.id, 'sprint:create', { workspaceId: body.workspaceId, projectId: body.projectId });
       const last = await prisma.sprint.findFirst({
         where: { workspaceId: body.workspaceId },
         orderBy: { position: 'desc' },
@@ -283,6 +285,7 @@ sprintsRouter.patch(
       if (sprint.workspaceId !== workspaceId) {
         throw new ForbiddenError('Sprint not in this workspace');
       }
+      await assertCan(req.user!.id, 'sprint:update', { workspaceId, projectId: sprint.projectId });
 
       const body = req.body as {
         name?: string; goal?: string | null; days?: number; status?: string;
@@ -331,6 +334,7 @@ sprintsRouter.delete('/:sprintId', async (req: Request, res: Response, next: Nex
     if (sprint.workspaceId !== workspaceId) {
       throw new ForbiddenError('Sprint not in this workspace');
     }
+    await assertCan(req.user!.id, 'sprint:delete', { workspaceId, projectId: sprint.projectId });
 
     const taskCount = await prisma.task.count({ where: { sprintId } });
     if (taskCount > 0) {
@@ -355,6 +359,7 @@ sprintsRouter.put(
       const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
       if (!sprint) throw new NotFoundError('Sprint');
       if (sprint.workspaceId !== workspaceId) throw new ForbiddenError('Sprint not in this workspace');
+      await assertCan(req.user!.id, 'sprint:actuals_write', { workspaceId, projectId: sprint.projectId });
       const { actualHours } = req.body as { actualHours: number };
       const actual = await prisma.sprintMemberActual.upsert({
         where: { sprintId_projectMemberId: { sprintId, projectMemberId } },
@@ -376,6 +381,7 @@ sprintsRouter.delete(
       const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
       if (!sprint) throw new NotFoundError('Sprint');
       if (sprint.workspaceId !== workspaceId) throw new ForbiddenError('Sprint not in this workspace');
+      await assertCan(req.user!.id, 'sprint:actuals_write', { workspaceId, projectId: sprint.projectId });
       await prisma.sprintMemberActual.deleteMany({ where: { sprintId, projectMemberId } });
       res.status(204).send();
     } catch (e) { next(e); }

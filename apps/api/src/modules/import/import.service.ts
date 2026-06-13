@@ -2,6 +2,7 @@ import { Prisma } from '@sprintflow/db';
 import { prisma } from '../../lib/prisma';
 import { storage } from '../../lib/storage';
 import { assertWorkspaceMember } from '../../lib/rbac';
+import { assertCan } from '../../lib/permissions';
 import { parseWorkbook, reparse, type ParseResult, type SprintMeta } from './parser';
 import { NotFoundError, ForbiddenError, AppError } from '../../lib/errors';
 
@@ -242,6 +243,7 @@ export async function commitImport(
 
   await assertWorkspaceMember(actorId, workspaceId, 'MEMBER');
   const projectId = await resolveImportProjectId(workspaceId, actorId, opts.projectId, opts.newProjectName);
+  await assertCan(actorId, 'import:write', { workspaceId, projectId });
 
   const rows = await prisma.importRow.findMany({
     where: { importId, status: { in: ['VALID', 'WARNING'] } },
@@ -348,7 +350,7 @@ export async function commitImport(
             // Upsert ProjectMember so TaskAssignment FK is satisfiable — skip admin users
             if (!projectMemberCache.has(cacheKey)) {
               const resolvedUser = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
-              if (resolvedUser?.role !== 'ADMIN') {
+              if (resolvedUser?.role !== 'SUPER_ADMIN') {
                 const pm = await tx.projectMember.upsert({
                   where: { projectId_userId: { projectId, userId } },
                   update: {},
@@ -514,6 +516,16 @@ export async function rollbackImport(importId: string, workspaceId: string, acto
   if (imp.status !== 'COMMITTED') {
     throw new ForbiddenError('Only committed imports can be rolled back');
   }
+
+  // Resolve the target projectId from a created task so we can check lead access
+  const rowWithTask = await prisma.importRow.findFirst({
+    where: { importId, createdTaskId: { not: null } },
+    select: { createdTask: { select: { projectId: true } } },
+  });
+  await assertCan(actorId, 'import:write', {
+    workspaceId,
+    projectId: rowWithTask?.createdTask?.projectId ?? null,
+  });
 
   const linkedRows = await prisma.importRow.findMany({
     where: { importId, createdTaskId: { not: null } },

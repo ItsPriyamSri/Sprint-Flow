@@ -4,6 +4,7 @@ import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
 import { assertWorkspaceMember } from '../../lib/rbac';
+import { assertCan, rosterExclusionWhere } from '../../lib/permissions';
 import { NotFoundError, ForbiddenError, AppError, ConflictError } from '../../lib/errors';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -124,7 +125,7 @@ projectsRouter.get('/:projectId', async (req: Request, res: Response, next: Next
       where: { id: projectId },
       include: {
         members: {
-          where: { user: { role: { not: 'ADMIN' } } },
+          where: rosterExclusionWhere,
           include: { user: { select: { id: true, name: true, email: true, status: true } } },
         },
         sprints: { orderBy: { position: 'asc' } },
@@ -325,9 +326,7 @@ projectsRouter.post(
         where: { userId_workspaceId: { userId: req.user!.id, workspaceId: body.workspaceId } },
       });
       if (!wsMembership) throw new ForbiddenError('Not a workspace member');
-      if (wsMembership.role === 'VIEWER') {
-        throw new ForbiddenError('Viewers cannot create projects');
-      }
+      await assertCan(req.user!.id, 'project:create', { workspaceId: body.workspaceId });
 
       const memberUserIds = body.members.map((m) => m.userId);
       const validMembers = await prisma.workspaceMember.findMany({
@@ -350,10 +349,10 @@ projectsRouter.post(
           },
         });
 
-        // Create project members — skip any admin users (admins manage via workspace membership)
+        // Create project members — skip any super admin users (they manage via global role)
         const adminUserIds = (
           await tx.user.findMany({
-            where: { id: { in: body.members.map((m) => m.userId) }, role: 'ADMIN' },
+            where: { id: { in: body.members.map((m) => m.userId) }, role: 'SUPER_ADMIN' },
             select: { id: true },
           })
         ).map((u) => u.id);
@@ -454,7 +453,8 @@ projectsRouter.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.params as { projectId: string };
-      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      const project = await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      await assertCan(req.user!.id, 'project:update', { workspaceId: project.workspaceId, projectId });
       const body = req.body as {
         name?: string; description?: string | null;
         daysPerSprint?: number; daysPerWeek?: number; releaseDate?: string | null;
@@ -478,9 +478,8 @@ projectsRouter.patch(
 projectsRouter.delete('/:projectId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { projectId } = req.params as { projectId: string };
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
-    if (!project) throw new NotFoundError('Project');
-    await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+    const project = await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+    await assertCan(req.user!.id, 'project:update', { workspaceId: project.workspaceId, projectId });
 
     await prisma.$transaction(async (tx) => {
       await tx.task.deleteMany({ where: { projectId } });
@@ -503,7 +502,8 @@ projectsRouter.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId, memberId } = req.params as { projectId: string; memberId: string };
-      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      const project = await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      await assertCan(req.user!.id, 'project:member_patch', { workspaceId: project.workspaceId, projectId });
       await assertProjectMemberBelongs(projectId, memberId);
       const body = req.body as { role?: string; hoursPerDay?: number };
       const updated = await prisma.projectMember.update({
@@ -612,9 +612,8 @@ projectsRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.params as { projectId: string };
-      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
-      const project = await prisma.project.findUnique({ where: { id: projectId } });
-      if (!project) throw new NotFoundError('Project');
+      const project = await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      await assertCan(req.user!.id, 'epic:create', { workspaceId: project.workspaceId, projectId });
 
       const body = req.body as { name: string; color?: string };
 
@@ -651,9 +650,8 @@ projectsRouter.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId, epicId } = req.params as { projectId: string; epicId: string };
-      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
-      const project = await prisma.project.findUnique({ where: { id: projectId } });
-      if (!project) throw new NotFoundError('Project');
+      const project = await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      await assertCan(req.user!.id, 'epic:update', { workspaceId: project.workspaceId, projectId });
 
       const epic = await prisma.epic.findFirst({ where: { id: epicId, projectId } });
       if (!epic) throw new NotFoundError('Epic');
@@ -688,7 +686,8 @@ projectsRouter.delete(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId, epicId } = req.params as { projectId: string; epicId: string };
-      await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      const project = await assertProjectAccess(projectId, req.user!.id, 'MEMBER');
+      await assertCan(req.user!.id, 'epic:delete', { workspaceId: project.workspaceId, projectId });
 
       const epic = await prisma.epic.findFirst({ where: { id: epicId, projectId } });
       if (!epic) throw new NotFoundError('Epic');
@@ -717,7 +716,7 @@ projectsRouter.get('/:projectId/my-work', async (req: Request, res: Response, ne
       where: { projectId, userId: req.user!.id },
       include: { user: { select: { id: true, name: true, email: true, status: true } } },
     });
-    if (!projectMember && req.user!.role !== 'ADMIN') {
+    if (!projectMember && req.user!.role !== 'SUPER_ADMIN') {
       throw new ForbiddenError('You are not a member of this project');
     }
 
@@ -995,7 +994,7 @@ projectsRouter.get('/:projectId/team', async (req: Request, res: Response, next:
       where: { id: projectId },
       include: {
         members: {
-          where: { user: { role: { not: 'ADMIN' } } },
+          where: rosterExclusionWhere,
           include: { user: { select: { id: true, name: true, email: true, status: true } } },
         },
         sprints: { orderBy: { position: 'asc' } },
@@ -1053,7 +1052,7 @@ projectsRouter.get('/:projectId/dashboard', async (req: Request, res: Response, 
       where: { id: projectId },
       include: {
         members: {
-          where: { user: { role: { not: 'ADMIN' } } },
+          where: rosterExclusionWhere,
           include: { user: { select: { id: true, name: true, email: true, status: true } } },
         },
         sprints: { orderBy: { position: 'asc' } },

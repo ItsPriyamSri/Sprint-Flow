@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { validate } from '../../middleware/validate';
-import { requireAuth, requireGlobalRole, requireWorkspaceRole } from '../../middleware/auth';
+import { requireAuth, requireSuperAdmin, requireWorkspaceRole } from '../../middleware/auth';
 import { InviteUserSchema, ClaimAccountSchema } from '@sprintflow/shared';
 import { z } from 'zod';
 import * as ctrl from './users.controller';
@@ -23,10 +23,10 @@ usersRouter.get('/workspace/:workspaceId', requireWorkspaceRole('VIEWER'), ctrl.
 // Get a single user
 usersRouter.get('/:userId', ctrl.getUser);
 
-// Invite a user to a workspace (admin only)
+// Invite a user to a workspace (super admin only)
 usersRouter.post(
   '/workspace/:workspaceId/invite',
-  requireWorkspaceRole('ADMIN'),
+  requireSuperAdmin,
   validate(InviteUserSchema),
   ctrl.invite,
 );

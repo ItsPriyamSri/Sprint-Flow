@@ -4,6 +4,7 @@ import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
 import { NotFoundError, ForbiddenError, AppError } from '../../lib/errors';
+import { assertCan } from '../../lib/permissions';
 import type { Request, Response, NextFunction } from 'express';
 
 export const boardsRouter: IRouter = Router();
@@ -108,14 +109,9 @@ boardsRouter.post(
       const { boardId } = req.params as { boardId: string };
       const { name, key } = req.body as { name: string; key?: string };
 
-      const board = await prisma.board.findUnique({
-        where: { id: boardId },
-        include: { workspace: { include: { members: { select: { userId: true } } } } },
-      });
+      const board = await prisma.board.findUnique({ where: { id: boardId } });
       if (!board) throw new NotFoundError('Board');
-      if (!board.workspace.members.some((m) => m.userId === req.user!.id)) {
-        throw new ForbiddenError('Not a workspace member');
-      }
+      await assertCan(req.user!.id, 'board:column_write', { workspaceId: board.workspaceId });
 
       const last = await prisma.boardColumn.findFirst({
         where: { boardId },
@@ -148,15 +144,10 @@ boardsRouter.delete('/:boardId/columns/:columnId', async (req: Request, res: Res
 
     const board = await prisma.board.findUnique({
       where: { id: boardId },
-      include: {
-        workspace: { include: { members: { select: { userId: true } } } },
-        columns: { orderBy: { position: 'asc' } },
-      },
+      include: { columns: { orderBy: { position: 'asc' } } },
     });
     if (!board) throw new NotFoundError('Board');
-    if (!board.workspace.members.some((m) => m.userId === req.user!.id)) {
-      throw new ForbiddenError('Not a workspace member');
-    }
+    await assertCan(req.user!.id, 'board:column_write', { workspaceId: board.workspaceId });
 
     const column = board.columns.find((c) => c.id === columnId);
     if (!column) throw new NotFoundError('Column');
@@ -203,14 +194,9 @@ boardsRouter.patch(
       const { boardId } = req.params as { boardId: string };
       const { columnIds } = req.body as { columnIds: string[] };
 
-      const board = await prisma.board.findUnique({
-        where: { id: boardId },
-        include: { workspace: { include: { members: { select: { userId: true } } } } },
-      });
+      const board = await prisma.board.findUnique({ where: { id: boardId } });
       if (!board) throw new NotFoundError('Board');
-      if (!board.workspace.members.some((m) => m.userId === req.user!.id)) {
-        throw new ForbiddenError('Not a workspace member');
-      }
+      await assertCan(req.user!.id, 'board:column_write', { workspaceId: board.workspaceId });
 
       await Promise.all(
         columnIds.map((id, i) =>

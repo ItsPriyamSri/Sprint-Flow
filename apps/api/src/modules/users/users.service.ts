@@ -59,7 +59,7 @@ export async function listUsers(workspaceId: string, query?: string) {
   return prisma.user.findMany({
     where: {
       memberships: { some: { workspaceId } },
-      role: { not: 'ADMIN' },
+      role: { not: 'SUPER_ADMIN' },
       ...(query
         ? {
             OR: [

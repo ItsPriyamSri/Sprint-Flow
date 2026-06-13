@@ -17,12 +17,15 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   next();
 }
 
-export function requireGlobalRole(role: 'ADMIN') {
-  return (req: Request, _res: Response, next: NextFunction) => {
-    if (!req.user) return next(new UnauthorizedError());
-    if (req.user.role !== role) return next(new ForbiddenError('Requires admin role'));
-    next();
-  };
+export function requireSuperAdmin(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user) return next(new UnauthorizedError());
+  if (req.user.role !== 'SUPER_ADMIN') return next(new ForbiddenError('Requires Super Admin'));
+  next();
+}
+
+/** @deprecated Use requireSuperAdmin — kept for any remaining call sites */
+export function requireGlobalRole(_role: 'ADMIN') {
+  return requireSuperAdmin;
 }
 
 export function requireWorkspaceRole(minRole: 'VIEWER' | 'MEMBER' | 'ADMIN' | 'OWNER') {
