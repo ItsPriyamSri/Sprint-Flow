@@ -32,7 +32,8 @@ enum ProjectRole {
 enum UserStatus {
   ACTIVE
   INVITED
-  UNCLAIMED // created from Excel owner name, no password yet
+  UNCLAIMED    // created from Excel owner name, no password yet
+  DEACTIVATED  // manually deactivated by super admin
 }
 
 enum SprintStatus {

@@ -17,6 +17,7 @@ import { tasksRouter }      from './modules/tasks/tasks.routes';
 import { sprintsRouter }    from './modules/sprints/sprints.routes';
 import { activityRouter }   from './modules/activity/activity.routes';
 import { projectsRouter }   from './modules/projects/projects.routes';
+import { adminRouter }      from './modules/admin/admin.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -49,6 +50,7 @@ export function createApp(): Express {
   app.use('/api/v1/sprints',    sprintsRouter);
   app.use('/api/v1/activity',   activityRouter);
   app.use('/api/v1/projects',   projectsRouter);
+  app.use('/api/v1/admin',      adminRouter);
 
   app.use(errorHandler);
   return app;

@@ -18,23 +18,7 @@ function clearRefreshCookie(res: Response) {
   res.clearCookie(REFRESH_COOKIE, { ...COOKIE_OPTIONS, maxAge: 0 });
 }
 
-type SerializedUser = {
-  id: string;
-  email: string | null;
-  name: string;
-  role: string;
-  status: string;
-  createdAt: string;
-};
-
-function serializeUser(user: {
-  id: string;
-  email: string | null;
-  name: string;
-  role: string;
-  status: string;
-  createdAt: Date;
-}): SerializedUser {
+function serializeUserWithMemberships(user: Awaited<ReturnType<typeof authService.getMe>>) {
   return {
     id: user.id,
     email: user.email,
@@ -42,18 +26,19 @@ function serializeUser(user: {
     role: user.role,
     status: user.status,
     createdAt: user.createdAt.toISOString(),
-  };
-}
-
-function serializeUserWithMemberships(user: Awaited<ReturnType<typeof authService.getMe>>) {
-  return {
-    ...serializeUser(user),
+    mustChangePassword: user.mustChangePassword,
     memberships: user.memberships.map((m) => ({
       workspaceId: m.workspaceId,
       workspaceName: m.workspace.name,
       workspaceSlug: m.workspace.slug,
       role: m.role,
       boards: m.workspace.boards,
+    })),
+    projectMemberships: user.projectMemberships.map((pm) => ({
+      id: pm.id,
+      projectId: pm.projectId,
+      role: pm.role,
+      hoursPerDay: pm.hoursPerDay,
     })),
   };
 }

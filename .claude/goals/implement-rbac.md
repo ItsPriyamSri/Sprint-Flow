@@ -38,12 +38,12 @@ Update this section as you work:
 | Phase | Status | Commit hash | Gate |
 |-------|--------|-------------|------|
 | A — Schema & foundation | ✅ done | 924a6da | ✅ all pass |
-| B — Permission engine | ✅ done | (pending commit) | ✅ tsc all pass |
-| C — Auth & admin API | ⬜ pending | | |
+| B — Permission engine | ✅ done | 67b375d | ✅ tsc all pass |
+| C — Auth & admin API | ✅ done | (pending commit) | ✅ tsc all pass |
 | D — Frontend | ⬜ pending | | |
 | E — Hardening | ⬜ pending | | |
 
-**Current phase:** C
+**Current phase:** D
 
 ---
 
