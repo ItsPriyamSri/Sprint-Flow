@@ -41,7 +41,7 @@ Update this section as you work:
 | B — Permission engine | ✅ done | 67b375d | ✅ tsc all pass |
 | C — Auth & admin API | ✅ done | 82db6c5 | ✅ tsc all pass |
 | D — Frontend | ✅ done | d9271b8 | ✅ tsc all pass |
-| E — Hardening | ✅ done | (pending commit) | ✅ tsc all pass |
+| E — Hardening | ✅ done | 29113fd | ✅ tsc all pass |
 
 **Current phase:** E
 
