@@ -24,7 +24,7 @@ pnpm dev
 | **API** | http://localhost:3001 |
 | **Health check** | http://localhost:3001/api/v1/health → `{"status":"ok","db":"ok"}` |
 
-**Login (after seed):** `admin@sprintflow.local` / `Admin1234!`
+**Login (after seed):** `admin@sprintflow.local` / `Admin1234!` (Super Admin)
 
 `pnpm dev` starts both API and web via Turbo. To run one service only:
 
@@ -147,15 +147,49 @@ docker-compose.yml        Full stack (production)
 
 ---
 
+## Auth & Roles
+
+### Three-tier RBAC
+
+| Tier | How set | Permissions |
+|------|---------|-------------|
+| **Super Admin** | `User.role = SUPER_ADMIN` via seed or admin API | Full bypass on all API checks; excluded from assignee rosters; can manage users via `/settings/admin` |
+| **Lead** | `ProjectMember.role = LEAD` per project | Create/edit/delete tasks, sprints, epics, assignments, import in their project; see all members' work |
+| **Member** (default) | `User.role = MEMBER` | Read all data; write workflow fields (`done`, `blocked`, `deferred`, `columnId`) on assigned tasks only |
+
+### JIT provisioning
+
+Users with an email matching `ALLOWED_EMAIL_DOMAINS` (comma-separated in `.env`) can log in with the `DEFAULT_MEMBER_PASSWORD` without a pre-created account. They are auto-provisioned as `MEMBER`, joined to the default workspace, and forced to change their password on first login.
+
+Super admin emails (`SUPER_ADMIN_EMAILS`) are excluded from JIT and must be seeded explicitly.
+
+### Admin API (`/api/v1/admin/*`)
+
+All routes require `SUPER_ADMIN`. Available at `/settings/admin` in the UI:
+
+| Endpoint | Action |
+|----------|--------|
+| `GET /admin/users` | List all users |
+| `PATCH /admin/users/:id/lead` | Promote/demote project lead |
+| `PATCH /admin/users/:id/status` | Activate / deactivate |
+| `POST /admin/users/:id/reset-password` | Reset to `DEFAULT_MEMBER_PASSWORD` |
+
+### Rate limiting
+
+Login endpoint: **10 requests/minute/IP** (returns `429` when exceeded).
+
+---
+
 ## Architecture
 
 ```
 Browser (Next.js)  →  Express API (/api/v1/*)  →  PostgreSQL (Prisma)
-                                               →  Local FS (uploads)
+                                               →  Local FS / S3 (uploads)
 ```
 
 - JWT access (15 min) + rotating refresh (7 days, httpOnly cookie)
-- Roles: global `ADMIN` / `MEMBER` + workspace `OWNER` / `ADMIN` / `MEMBER` / `VIEWER`
-- **My Work:** admins get `allMembersWork[]`; members get own assignments only
+- Global roles: `SUPER_ADMIN` / `MEMBER`; workspace roles: `OWNER` / `ADMIN` / `MEMBER` / `VIEWER`; project roles: `LEAD` / `MEMBER` / `VIEWER`
+- Permission engine in `apps/api/src/lib/permissions.ts` — all write routes call `assertCan` before mutating data
+- **My Work:** leads/super admin get `allMembersWork[]`; members see own assignments only
 - Task mutations logged in `ActivityLog`
 - Fractional positions for O(1) card reorder

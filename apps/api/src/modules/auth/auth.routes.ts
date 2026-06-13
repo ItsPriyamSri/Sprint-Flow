@@ -7,9 +7,11 @@ import { z } from 'zod';
 import * as ctrl from './auth.controller';
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: { code: 'TOO_MANY_REQUESTS', message: 'Too many login attempts' } },
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'TOO_MANY_REQUESTS', message: 'Too many login attempts — try again in a minute' } },
 });
 
 export const authRouter: IRouter = Router();

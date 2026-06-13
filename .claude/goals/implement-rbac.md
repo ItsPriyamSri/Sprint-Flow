@@ -1,6 +1,6 @@
 # GOAL: Implement SprintFlow RBAC (Phases A → E)
 
-**Status:** ACTIVE  
+**Status:** DONE  
 **Created:** 2026-06-13  
 **Source of truth:** `implementation-plan.md` → section **"Real Auth, Roles & Permissions (RBAC)"** (starts ~line 384)  
 **Repo:** `/home/mrstark/Documents/Repos/SprintFlow`  
@@ -40,8 +40,8 @@ Update this section as you work:
 | A — Schema & foundation | ✅ done | 924a6da | ✅ all pass |
 | B — Permission engine | ✅ done | 67b375d | ✅ tsc all pass |
 | C — Auth & admin API | ✅ done | 82db6c5 | ✅ tsc all pass |
-| D — Frontend | ✅ done | (pending commit) | ✅ tsc all pass |
-| E — Hardening | ⬜ pending | | |
+| D — Frontend | ✅ done | d9271b8 | ✅ tsc all pass |
+| E — Hardening | ✅ done | (pending commit) | ✅ tsc all pass |
 
 **Current phase:** E
 
