@@ -47,8 +47,8 @@ class S3StorageDriver implements StorageDriver {
   private async getClient() {
     // Imported lazily so local-driver builds don't need the AWS SDK installed
     const { S3Client } = await import('@aws-sdk/client-s3');
-    // Credentials come from the ECS task role via the default provider chain —
-    // never pass AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY directly.
+    // Default provider chain: AWS_ACCESS_KEY_ID/SECRET env vars (Railway, local),
+    // or ECS task role (AWS) — no hardcoded credentials needed in either case.
     return new S3Client({ region: this.region });
   }
 

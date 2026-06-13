@@ -14,6 +14,8 @@ env:
 
 jobs:
   deploy:
+    # Only runs when AWS_REGION is configured — skips silently until AWS is provisioned.
+    if: ${{ vars.AWS_REGION != '' }}
     name: Build, push, and deploy
     runs-on: ubuntu-latest
 

@@ -1,9 +1,51 @@
 # SprintFlow — Build Progress & Handoff
 
-**Last updated:** 2026-06-09  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)** · **14 (Sprint Actual Hours, Variance & Efficiency)** · **15 (Frontend Polish — Overview & Dashboard)** · **16 (AWS Deployment Readiness)**  
-**Status:** Full Scrum platform through Phase 16 — all code changes from the AWS deployment plan applied; project is production-deployable on ECS Fargate. Real admin/team email accounts are pending (current seed uses mock credentials).  
+**Last updated:** 2026-06-13  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)** · **14 (Sprint Actual Hours, Variance & Efficiency)** · **15 (Frontend Polish — Overview & Dashboard)** · **16 (AWS Deployment Readiness)** · **17 (Vercel + Railway Deployment)**  
+**Status:** Full Scrum platform through Phase 17 — Vercel-first deployment configured. Web deploys to Vercel; API deploys to Railway via Docker. AWS ECS workflow preserved and gates itself until AWS infra is provisioned.  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+---
+
+## Phase 17 — Vercel + Railway Deployment (2026-06-13)
+
+Configured the project for a Vercel-first deployment before the eventual AWS ECS migration. No new features; pure infrastructure changes.
+
+### Deployment targets
+
+| Service | Platform | How |
+|---|---|---|
+| `apps/web` (Next.js) | **Vercel** | Auto-deploys via Vercel GitHub integration; reads `vercel.json` at repo root |
+| `apps/api` (Express) | **Railway** | Docker build via `railway.toml`; uses existing `docker/Dockerfile.api` |
+| Database | **Neon / Railway Postgres** | Connection string in Railway `DATABASE_URL` env var |
+| File uploads | **local** (initial) → S3-compatible | `STORAGE_DRIVER=local` for now; S3 path already wired in `storage.ts` |
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `apps/web/next.config.ts` | `output: 'standalone'` now conditional on `VERCEL` env var — skipped on Vercel (uses its own build pipeline), kept for Docker |
+| `turbo.json` | Added `VERCEL` to `globalEnv` so turbo cache invalidates correctly between Vercel and local Docker builds |
+| `vercel.json` *(new)* | Monorepo build config: `pnpm turbo build --filter=@sprintflow/web...`, `outputDirectory: apps/web/.next`, framework: nextjs |
+| `railway.toml` *(new)* | Points Railway at `docker/Dockerfile.api`; health check on `/api/v1/health`, ON_FAILURE restart policy |
+| `apps/api/src/lib/storage.ts` | Updated S3 credential comment — default provider chain reads `AWS_ACCESS_KEY_ID`/`SECRET` env vars on Railway and uses ECS task role on AWS; both work without code changes |
+| `.env.example` | Added deployment target header explaining which vars go to Vercel vs Railway vs AWS; `NEXT_PUBLIC_API_URL` and storage driver docs updated |
+| `.github/workflows/deploy.yml` | Gated with `if: vars.AWS_REGION != ''` — silently skips on every push until AWS infra is provisioned (no more red X on commits) |
+
+### How to deploy
+
+**Web → Vercel**
+1. Import repo on vercel.com/new — leave Root Directory blank (reads `vercel.json` automatically)
+2. Set one environment variable in Vercel project settings: `NEXT_PUBLIC_API_URL=https://<railway-api-url>/api/v1`
+3. Every push to `main` auto-deploys
+
+**API → Railway**
+1. New Railway project → Deploy from GitHub → select this repo
+2. Railway reads `railway.toml` and builds `docker/Dockerfile.api` (migrations run automatically on start)
+3. Set environment variables: `NODE_ENV=production`, `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN=https://<vercel-url>.vercel.app`
+
+**Activating AWS ECS later**
+- Set `vars.AWS_REGION` in GitHub Actions → existing `deploy.yml` activates automatically on next push to `main`
 
 ---
 
