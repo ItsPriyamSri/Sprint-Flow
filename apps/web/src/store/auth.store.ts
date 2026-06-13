@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { UserDto } from '@sprintflow/shared';
+import type { ProjectMembership } from '@/lib/api/auth';
 
 interface Membership {
   workspaceId: string;
@@ -11,7 +12,9 @@ interface Membership {
 }
 
 interface AuthUser extends UserDto {
+  mustChangePassword?: boolean;
   memberships?: Membership[];
+  projectMemberships?: ProjectMembership[];
 }
 
 interface AuthState {

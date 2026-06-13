@@ -39,11 +39,11 @@ Update this section as you work:
 |-------|--------|-------------|------|
 | A — Schema & foundation | ✅ done | 924a6da | ✅ all pass |
 | B — Permission engine | ✅ done | 67b375d | ✅ tsc all pass |
-| C — Auth & admin API | ✅ done | (pending commit) | ✅ tsc all pass |
-| D — Frontend | ⬜ pending | | |
+| C — Auth & admin API | ✅ done | 82db6c5 | ✅ tsc all pass |
+| D — Frontend | ✅ done | (pending commit) | ✅ tsc all pass |
 | E — Hardening | ⬜ pending | | |
 
-**Current phase:** D
+**Current phase:** E
 
 ---
 

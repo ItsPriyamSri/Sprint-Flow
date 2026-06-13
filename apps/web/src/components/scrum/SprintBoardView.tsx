@@ -11,6 +11,7 @@ import { updateSprint, upsertSprintActual, deleteSprintActual } from '@/lib/api/
 import { updateEpic, updateProjectMember } from '@/lib/api/projects';
 import { ScrumTaskDrawer } from './ScrumTaskDrawer';
 import { InlineAddTask } from './InlineAddTask';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface Props {
   board: SprintBoardDto;
@@ -1507,6 +1508,8 @@ function EpicSection({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
+  const { isSuperAdmin, isLead } = usePermissions();
+  const canAddTask = isSuperAdmin || (projectId ? isLead(projectId) : false);
 
   return (
     <div className="mb-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
@@ -1573,7 +1576,7 @@ function EpicSection({
             </tbody>
           </table>
 
-          {addingTask ? (
+          {canAddTask && (addingTask ? (
             <div className="border-t border-slate-100 px-4 py-2 bg-slate-50/20 rounded-b-xl">
               <InlineAddTask
                 sprintId={sprintId}
@@ -1595,7 +1598,7 @@ function EpicSection({
               </svg>
               Add task
             </button>
-          )}
+          ))}
         </div>
       )}
     </div>

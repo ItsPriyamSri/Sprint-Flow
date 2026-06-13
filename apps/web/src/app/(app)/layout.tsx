@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
 import { useProjectStore } from '@/store/project.store';
@@ -12,6 +12,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const hasHydrated = useAuthStore((s) => s._hasHydrated);
   const accessToken = useAuthStore((s) => s.accessToken);
+  const mustChangePassword = useAuthStore((s) => s.user?.mustChangePassword);
+  const pathname = usePathname();
   const { activeProjectId, setActiveProject, setActiveProjectId } = useProjectStore();
 
   // Redirect to login if unauthenticated after hydration
@@ -20,6 +22,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace('/login');
     }
   }, [hasHydrated, accessToken, router]);
+
+  // Block app until password is changed
+  useEffect(() => {
+    if (hasHydrated && accessToken && mustChangePassword && pathname !== '/settings/password') {
+      router.replace('/settings/password');
+    }
+  }, [hasHydrated, accessToken, mustChangePassword, pathname, router]);
 
   const { data: workspace } = useQuery({
     queryKey: ['workspace'],
