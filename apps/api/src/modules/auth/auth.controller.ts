@@ -2,10 +2,13 @@ import type { Request, Response, NextFunction } from 'express';
 import * as authService from './auth.service';
 
 const REFRESH_COOKIE = 'sf_refresh';
+const isProduction = process.env['NODE_ENV'] === 'production';
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: 'strict' as const,
-  secure: process.env['NODE_ENV'] === 'production',
+  // SameSite=None required for cross-origin cookie sending (Vercel → Railway).
+  // Lax is fine for same-origin (local dev).
+  sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+  secure: isProduction,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7d ms
   path: '/api/v1/auth',
 };
