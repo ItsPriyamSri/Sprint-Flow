@@ -22,7 +22,7 @@ const storageDriver = opt('STORAGE_DRIVER', 'local') as 'local' | 's3';
 
 export const env = {
   NODE_ENV: opt('NODE_ENV', 'development'),
-  API_PORT: parseInt(opt('API_PORT', '3001'), 10),
+  API_PORT: parseInt(process.env['PORT'] ?? process.env['API_PORT'] ?? '3001', 10),
   DATABASE_URL: req('DATABASE_URL'),
   JWT_ACCESS_SECRET: req('JWT_ACCESS_SECRET'),
   JWT_REFRESH_SECRET: req('JWT_REFRESH_SECRET'),
