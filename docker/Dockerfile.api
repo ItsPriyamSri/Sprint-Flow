@@ -30,7 +30,7 @@ RUN npm install -g pnpm@9
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 apiuser
 
 # Production deps — prisma CLI is in packages/db/dependencies so it's included
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/db/package.json     ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json        ./apps/api/
