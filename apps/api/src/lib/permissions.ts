@@ -107,13 +107,17 @@ export async function can(
   // Actions always denied for non-super-admin in global scope
   if (action === 'project:create') return false;
 
+  // Workspace OWNER/ADMIN can perform any action within their workspace
+  const isWsOwnerOrAdmin = wsMembership.role === 'OWNER' || wsMembership.role === 'ADMIN';
+  if (isWsOwnerOrAdmin) return true;
+
   // Step 3: Check project-level LEAD role
   const projectId = ctx.projectId;
   const isLead = projectId ? await isLeadOnProject(actorId, projectId) : false;
 
   // Lead-scoped actions (project operations, meta edits, assignments, sprint/epic/import/board)
   const leadActions: Array<TaskAction | ProjectAction> = [
-    'task:create', 'task:edit_meta', 'task:delete', 'task:assign',
+    'task:create', 'task:edit_meta', 'task:workflow', 'task:delete', 'task:assign',
     'project:update', 'project:member_patch',
     'sprint:create', 'sprint:update', 'sprint:delete', 'sprint:actuals_write',
     'epic:create', 'epic:update', 'epic:delete',
