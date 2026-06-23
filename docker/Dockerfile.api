@@ -16,6 +16,8 @@ COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 COPY tsconfig.base.json ./
 
+# Compile shared to CommonJS so the runtime can load it without tsx
+RUN pnpm --filter @sprintflow/shared build
 # Generate Prisma client, then compile TypeScript
 RUN pnpm --filter @sprintflow/db generate
 RUN pnpm --filter @sprintflow/api build
@@ -39,7 +41,9 @@ RUN pnpm install --frozen-lockfile --prod
 
 # Artefacts from builder
 COPY --from=builder /app/packages/db/generated  ./packages/db/generated
-COPY --from=builder /app/packages/shared/src    ./packages/shared/src
+COPY --from=builder /app/packages/shared/dist   ./packages/shared/dist
+# Redirect shared's package.json to compiled output so Node resolves JS, not .ts
+RUN node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('./packages/shared/package.json','utf8'));p.main='./dist/index.js';p.types='./dist/index.d.ts';p.exports={'.':{require:'./dist/index.js',default:'./dist/index.js'}};fs.writeFileSync('./packages/shared/package.json',JSON.stringify(p,null,2));"
 COPY --from=builder /app/apps/api/dist          ./apps/api/dist
 
 # Migration files — required by `prisma migrate deploy` in the entrypoint
