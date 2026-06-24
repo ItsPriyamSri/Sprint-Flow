@@ -3,10 +3,6 @@ import type { SprintDto } from '@sprintflow/shared';
 
 export type { SprintDto };
 
-export async function listSprints(workspaceId: string) {
-  return apiFetch<{ data: SprintDto[] }>(`/sprints?workspaceId=${workspaceId}`);
-}
-
 export async function createSprint(
   workspaceId: string,
   input: {

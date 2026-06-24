@@ -1,13 +1,6 @@
 import { apiFetch } from './client';
 import type { QueryClient } from '@tanstack/react-query';
-import type { TaskDetail } from './tasks';
-
-export interface TaskAssignment {
-  id: string;
-  projectMemberId: string;
-  memberName: string;
-  hours: number;
-}
+import type { TaskDetail, TaskAssignment } from './tasks';
 
 export interface BoardTask {
   id: string;

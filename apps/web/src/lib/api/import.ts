@@ -95,11 +95,3 @@ export async function commitImport(
   });
 }
 
-export async function rollbackImport(
-  importId: string,
-  workspaceId: string,
-): Promise<{ deletedTasks: number }> {
-  return apiFetch(`/imports/${importId}/rollback?workspaceId=${workspaceId}`, {
-    method: 'POST',
-  });
-}

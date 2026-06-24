@@ -30,10 +30,6 @@ export async function login(email: string, password: string): Promise<LoginRespo
   });
 }
 
-export async function logout(): Promise<void> {
-  await apiFetch('/auth/logout', { method: 'POST' });
-}
-
 export async function getMe(): Promise<LoginResponse['user']> {
   return apiFetch('/auth/me');
 }

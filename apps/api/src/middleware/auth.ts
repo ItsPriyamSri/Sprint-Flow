@@ -23,11 +23,6 @@ export function requireSuperAdmin(req: Request, _res: Response, next: NextFuncti
   next();
 }
 
-/** @deprecated Use requireSuperAdmin — kept for any remaining call sites */
-export function requireGlobalRole(_role: 'ADMIN') {
-  return requireSuperAdmin;
-}
-
 export function requireWorkspaceRole(minRole: 'VIEWER' | 'MEMBER' | 'ADMIN' | 'OWNER') {
   return async (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(new UnauthorizedError());

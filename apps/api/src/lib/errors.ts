@@ -34,8 +34,3 @@ export class ConflictError extends AppError {
   }
 }
 
-export class ValidationError extends AppError {
-  constructor(details: unknown) {
-    super('VALIDATION_ERROR', 'Validation failed', 422, details);
-  }
-}

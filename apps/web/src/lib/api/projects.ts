@@ -6,11 +6,6 @@ import type {
 
 export type { ProjectDto, ProjectOverviewDto, SprintBoardDto, MyWorkDto, ProjectMemberDto, TeamViewDto, DashboardDto };
 
-export async function listProjects(workspaceId?: string): Promise<{ data: ProjectDto[] }> {
-  const qs = workspaceId ? `?workspaceId=${workspaceId}` : '';
-  return apiFetch(`/projects${qs}`);
-}
-
 export async function getProject(projectId: string): Promise<ProjectOverviewDto> {
   return apiFetch(`/projects/${projectId}`);
 }
