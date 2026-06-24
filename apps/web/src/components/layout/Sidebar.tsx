@@ -89,7 +89,7 @@ export function Sidebar({ workspace }: Props) {
                 <button
                   key={p.id}
                   onClick={() => { setActiveProject(p); setProjectMenuOpen(false); router.push('/overview'); }}
-                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-slate-50 ${p.id === activeProject?.id ? 'font-medium text-indigo-700' : 'text-slate-700'}`}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${p.id === activeProject?.id ? 'font-medium text-indigo-700' : 'text-slate-700'}`}
                 >
                   <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-indigo-100 text-[9px] font-bold text-indigo-700">
                     {initials(p.name)}
@@ -311,27 +311,13 @@ export function Sidebar({ workspace }: Props) {
 
         <div className="my-2 mx-2 border-t border-slate-100" />
 
-        <Link href="/board"
-          className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-            isActive('/board') ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
-          }`}
-        >
+        <Link href="/board" className={navLinkCls('/board')}>
           <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
               d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
           </svg>
           Flow view
         </Link>
-
-        {isLeadOrAdmin && (
-          <Link href="/import" className={navLinkCls('/import')}>
-            <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Import from sheet
-          </Link>
-        )}
 
         {isSuperAdmin && (
           <Link href="/settings/admin" className={navLinkCls('/settings/admin')}>
