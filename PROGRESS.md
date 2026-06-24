@@ -1,9 +1,165 @@
 # SprintFlow — Build Progress & Handoff
 
-**Last updated:** 2026-06-13  
-**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)** · **14 (Sprint Actual Hours, Variance & Efficiency)** · **15 (Frontend Polish — Overview & Dashboard)** · **16 (AWS Deployment Readiness)** · **17 (Vercel + Railway Deployment)**  
-**Status:** Full Scrum platform through Phase 17 — Vercel-first deployment configured. Web deploys to Vercel; API deploys to Railway via Docker. AWS ECS workflow preserved and gates itself until AWS infra is provisioned.  
+**Last updated:** 2026-06-24  
+**Phases complete:** 0 · 1 · 2 · 3 · 4 · 5 · 6 (Scrum platform) · 7 (Dashboard Customization & Backlog Import) · **8 (Collaboration & Reporting)** · **9 (Backlog UX & Sprint CRUD polish)** · **10 (Epic management, destructive deletes & Epics page)** · **11 (My Work — role-based view)** · **12 (Admin as Manager — no task assignments)** · **13 (Cross-view sync, UI polish & Activity persistence)** · **14 (Sprint Actual Hours, Variance & Efficiency)** · **15 (Frontend Polish — Overview & Dashboard)** · **16 (AWS Deployment Readiness)** · **17 (Vercel + Railway Deployment)** · **18 (Production Deployment Fixes)** · **19 (RBAC Hardening, Codebase Cleanup & Admin Overhaul)**  
+**Status:** Live on Vercel + Railway. All production login/auth/task bugs resolved. Admin dashboard overhauled with email-first user management and name-linking.  
 **Repo location:** `/home/mrstark/Documents/Repos/SprintFlow` (also `D:\Development Area\Priyam\SprintFlow`)
+
+### Live URLs
+| Service | URL |
+|---|---|
+| **Frontend (Vercel)** | https://sprint-flow-fawn.vercel.app |
+| **Backend (Railway)** | https://sprint-flow-production.up.railway.app |
+| **API base** | https://sprint-flow-production.up.railway.app/api/v1 |
+
+### Production accounts
+| Email | GlobalRole | WorkspaceRole | Notes |
+|---|---|---|---|
+| `priyam.srivastava@geti.education` | MEMBER | OWNER | Primary user — full workspace control, not system admin |
+| `super.admin@geti.education` | SUPER_ADMIN | OWNER | System admin — sees Admin Settings, can manage all users |
+
+---
+
+## Phase 19 — RBAC Hardening, Codebase Cleanup & Admin Dashboard Overhaul (2026-06-24)
+
+### RBAC: task workflow permissions fix
+
+**Problem:** In production, task moves (drag on Flow board) and checkbox toggles (Sprint board) were silently returning 403. Works on localhost because the local account was `SUPER_ADMIN` which bypasses all permission checks. In production `priyam.srivastava@geti.education` is `GlobalRole.MEMBER` + `WorkspaceRole.OWNER`, but `task:workflow` was only allowed for SUPER_ADMIN or users assigned to the task.
+
+**Root cause (in `apps/api/src/lib/permissions.ts`):**
+- `task:workflow` was not in `leadActions`, so a project LEAD couldn't even move tasks
+- No bypass for workspace OWNER/ADMIN — they'd fall through to `isAssignedToTask()` which returned false
+
+**Fix:** Two changes in `can()`:
+1. After the workspace membership gate, workspace OWNER or ADMIN now immediately return `true` for all non-global actions (i.e. anything except `project:create`)
+2. Added `task:workflow` to `leadActions` so project LEADs can move/check tasks they're not personally assigned to
+
+| File | Change |
+|---|---|
+| `apps/api/src/lib/permissions.ts` | Added `isWsOwnerOrAdmin` early-return; added `task:workflow` to `leadActions` |
+
+### Codebase cleanup
+
+Removed dead code accumulated across earlier phases:
+
+| File | What was removed |
+|---|---|
+| `apps/api/src/lib/errors.ts` | Unused error class stubs |
+| `apps/api/src/middleware/auth.ts` | Dead middleware variants |
+| `apps/web/src/components/layout/AppHeader.tsx` | Entire file removed — header was fully replaced by Sidebar layout |
+| `apps/web/src/hooks/useRequireAuth.ts` | Obsolete hook |
+| `apps/web/src/lib/api/auth.ts` | Removed stale re-exports |
+| `apps/web/src/lib/api/boards.ts` | Removed unused helpers |
+| `apps/web/src/lib/api/import.ts` | Dead import helpers |
+| `apps/web/src/lib/api/projects.ts` | Unused project API stubs |
+| `apps/web/src/lib/api/sprints.ts` | Unused sprint helpers |
+| `packages/shared/src/index.ts` | Removed stale re-export |
+| `packages/shared/src/schemas/board.ts` | Removed 24-line dead schema block |
+
+### Sidebar UI fixes
+
+Three visual fixes to the sidebar:
+
+| Item | Fix |
+|---|---|
+| "Import from sheet" sidebar link | Removed from main nav — it already exists in the project dropdown menu; no need to duplicate |
+| "Flow view" greyed out | Was using hardcoded `text-slate-400` instead of `navLinkCls()`. Now uses `navLinkCls('/board')` — same styling as all other nav items |
+| Project name center-alignment | Dropdown project buttons were missing `text-left`; added to match the top project switcher button |
+
+### Admin dashboard overhaul
+
+Complete redesign of `apps/web/src/app/(app)/settings/admin/page.tsx` and its supporting backend.
+
+**What changed conceptually:** The old page listed all workspace users in a flat table (name, email, global role, status, project role). The new page is email-first — the `@geti.education` email is the primary identifier. UNCLAIMED name-stubs (users created by sheet import or onboarding wizard, who have a name but no real account) can be explicitly linked to a real email user.
+
+**Prisma schema:**
+
+Added a self-referential optional FK to `User`:
+
+```prisma
+linkedToId   String?
+linkedTo     User?   @relation("LinkedNames", fields: [linkedToId], references: [id], onDelete: SetNull)
+linkedNames  User[]  @relation("LinkedNames")
+```
+
+Migration: `20260624070146_add_user_linked_to`
+
+**New / updated API routes (`apps/api/src/modules/admin/admin.routes.ts`):**
+
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/admin/users` | Returns only `@geti.education` email users + `unlinkedNames[]` (UNCLAIMED stubs with no email and no link) |
+| `POST` | `/admin/users` | Creates a new `@geti.education` user with default password + ACTIVE status so they can log in immediately. `mustChangePassword: true`. |
+| `POST` | `/admin/users/:id/link` | Links an UNCLAIMED name-stub to a real email user (sets `linkedToId`) |
+| `DELETE` | `/admin/users/:id/unlink/:nameId` | Removes the link (sets `linkedToId = null`) |
+
+**Bug caught and fixed during review:** The original `POST /admin/users` created users with `status: 'UNCLAIMED'`, which blocked login at `auth.service.ts:139` (`status !== 'ACTIVE'` → 401). Fixed to `status: 'ACTIVE'`.
+
+**Frontend (`apps/web/src/app/(app)/settings/admin/page.tsx`):**
+
+| Area | Design |
+|---|---|
+| **Email-first rows** | Each card leads with the `@geti.education` email in bold + a letter avatar. Global role column removed. |
+| **Linked name chips** | UNCLAIMED stubs linked to this email appear as removable chips (`[Name ×]`). A `+ name` dropdown shows all available unlinked stubs for assignment. |
+| **Status badges** | SUPER ADMIN · TEMP PW (`mustChangePassword`) · DEACTIVATED — inline, no column |
+| **Project role** | Small badge (LEAD / MEMBER / none) — only project role, no global role shown |
+| **Actions** | Make Lead / Demote · Deactivate / Activate · Reset PW |
+| **Search** | Live filter by email at the top |
+| **Add email (bottom)** | Form to pre-create any `@geti.education` account. Shows in the list with a TEMP PW badge until they log in and change their password. |
+
+**Frontend API client (`apps/web/src/lib/api/admin.ts`):**
+
+Added `addEmailUser`, `linkName`, `unlinkName`. Updated `AdminUser` type to include `linkedNames: { id, name }[]`. Updated `listAdminUsers` return type to `AdminUsersResponse` (includes `unlinkedNames[]`).
+
+### Verification (2026-06-24)
+
+- `pnpm --filter @sprintflow/api build` — **PASS**
+- `pnpm --filter @sprintflow/web exec tsc --noEmit` — **PASS**
+- Confirmed live on https://sprint-flow-fawn.vercel.app: tasks move and toggle correctly for `priyam.srivastava@geti.education`
+- `super.admin@geti.education` can log in and sees Admin Settings in sidebar
+
+---
+
+## Phase 18 — Production Deployment Fixes (2026-06-23)
+
+Resolved five production-only bugs discovered after the Phase 17 Railway deploy. No new features; all fixes are infrastructure or auth corrections.
+
+### Fixes
+
+| # | Problem | Root cause | Fix |
+|---|---|---|---|
+| 1 | **`ERR_MODULE_NOT_FOUND`: `@sprintflow/shared/src/enums`** | The Docker runner stage copied the TypeScript source of `packages/shared`. The compiled API cannot `require()` `.ts` files at runtime. | Added `RUN pnpm --filter @sprintflow/shared build` to the builder stage; copies `dist/` to runner; patches `packages/shared/package.json` `main`/`exports` to point at compiled JS. Added `packages/shared/tsconfig.build.json` (CommonJS output). |
+| 2 | **`ERR_SOCKET_BAD_PORT` on Railway startup** | `API_PORT` in Railway dashboard was set to `${{PORT}}` (template syntax). Railway injects `PORT` at runtime — template references in dashboard variables resolve to empty string, causing `parseInt('')` → `NaN`. | `apps/api/src/lib/env.ts`: `API_PORT` now reads `process.env['PORT'] ?? process.env['API_PORT'] ?? '3001'`. |
+| 3 | **"Session expired" immediately after login** | Auth cookie was `SameSite=Strict`. The browser blocks `SameSite=Strict` cookies on cross-origin requests (Vercel origin → Railway API). | `apps/api/src/modules/auth/auth.controller.ts`: cookie is `SameSite=None; Secure` when `NODE_ENV=production`, `SameSite=Lax` in dev. |
+| 4 | **`pnpm-lock.yaml` missing in Docker runner** | Runner stage `COPY` command didn't include `pnpm-lock.yaml`, causing `ERR_PNPM_NO_LOCKFILE` during `pnpm install --frozen-lockfile`. | `docker/Dockerfile.api`: added `pnpm-lock.yaml` to the runner COPY. |
+| 5 | **`vercel.json` root config conflict** | Root `vercel.json` was intercepted by Vercel before the `apps/web/vercel.json` inside the monorepo, causing build misdetection. | Removed root `vercel.json`; confirmed Vercel Root Directory = `apps/web` with `apps/web/vercel.json` providing the correct build command and output directory. |
+
+### Production DB setup
+
+Performed directly against Railway Postgres via `psql` through a local Podman container:
+
+- Created `priyam.srivastava@geti.education` — `GlobalRole.MEMBER`, `WorkspaceRole.OWNER`
+- Created `super.admin@geti.education` — `GlobalRole.SUPER_ADMIN`, `WorkspaceRole.OWNER`
+- Removed `iris@sprintflow.local` and `nate@sprintflow.local` from production
+- Added `super.admin@geti.education` to `SUPER_ADMIN_EMAILS` Railway env var (prevents JIT provisioning of that email with default password)
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `docker/Dockerfile.api` | Added `pnpm-lock.yaml` to runner COPY; added `pnpm --filter @sprintflow/shared build`; copies `packages/shared/dist/`; patches shared `package.json` at build time |
+| `packages/shared/tsconfig.build.json` | New — CommonJS output config for the shared package |
+| `packages/shared/package.json` | Added `"build": "tsc -p tsconfig.build.json"` script |
+| `apps/api/src/lib/env.ts` | Read `PORT` before `API_PORT` for Railway compatibility |
+| `apps/api/src/modules/auth/auth.controller.ts` | `SameSite=None; Secure` in production; `SameSite=Lax` in development |
+| `vercel.json` (root) | Deleted — Root Directory set to `apps/web` in Vercel dashboard instead |
+
+### Verification (2026-06-23)
+
+- Railway build: green ✓ — no module-not-found errors
+- Health check: `https://sprint-flow-production.up.railway.app/api/v1/health` → `{"status":"ok","db":"ok"}`
+- Login flow: cookie sets correctly; `/auth/me` returns user; no "Session expired" on Vercel
+- Task updates: `PATCH /tasks/:id` and `PATCH /tasks/:id/move` return 200 for OWNER-role user
 
 ---
 
