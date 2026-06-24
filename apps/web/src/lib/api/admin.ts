@@ -1,5 +1,10 @@
 import { apiFetch } from './client';
 
+export interface LinkedName {
+  id: string;
+  name: string;
+}
+
 export interface AdminUser {
   id: string;
   email: string | null;
@@ -9,11 +14,24 @@ export interface AdminUser {
   mustChangePassword: boolean;
   createdAt: string;
   projectMemberships: Array<{ id: string; projectId: string; role: string }>;
+  linkedNames: LinkedName[];
 }
 
-export async function listAdminUsers(workspaceId?: string): Promise<{ data: AdminUser[] }> {
+export interface AdminUsersResponse {
+  data: AdminUser[];
+  unlinkedNames: LinkedName[];
+}
+
+export async function listAdminUsers(workspaceId?: string): Promise<AdminUsersResponse> {
   const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
   return apiFetch(`/admin/users${qs}`);
+}
+
+export async function addEmailUser(email: string, workspaceId: string): Promise<AdminUser> {
+  return apiFetch('/admin/users', {
+    method: 'POST',
+    body: JSON.stringify({ email, workspaceId }),
+  });
 }
 
 export async function setUserLead(
@@ -39,4 +57,15 @@ export async function setUserStatus(
 
 export async function resetUserPassword(userId: string): Promise<{ message: string }> {
   return apiFetch(`/admin/users/${userId}/reset-password`, { method: 'POST' });
+}
+
+export async function linkName(userId: string, nameUserId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/admin/users/${userId}/link`, {
+    method: 'POST',
+    body: JSON.stringify({ nameUserId }),
+  });
+}
+
+export async function unlinkName(userId: string, nameId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/admin/users/${userId}/unlink/${nameId}`, { method: 'DELETE' });
 }

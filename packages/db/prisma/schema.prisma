@@ -101,15 +101,18 @@ model User {
   mustChangePassword Boolean    @default(false)
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
+  linkedToId         String?    // UNCLAIMED name-stubs can be linked to a real email user
 
-  memberships       WorkspaceMember[]
+  memberships        WorkspaceMember[]
   projectMemberships ProjectMember[]
-  comments          Comment[]
-  activityLogs      ActivityLog[]
-  notifications     Notification[]
-  preferences       UserPreference?
-  uploads           Import[]
-  attachments       Attachment[]
+  comments           Comment[]
+  activityLogs       ActivityLog[]
+  notifications      Notification[]
+  preferences        UserPreference?
+  uploads            Import[]
+  attachments        Attachment[]
+  linkedTo           User?      @relation("LinkedNames", fields: [linkedToId], references: [id], onDelete: SetNull)
+  linkedNames        User[]     @relation("LinkedNames")
 }
 
 model RefreshToken {

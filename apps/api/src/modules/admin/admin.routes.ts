@@ -12,26 +12,138 @@ import type { Request, Response, NextFunction } from 'express';
 export const adminRouter: IRouter = Router();
 adminRouter.use(requireAuth, requireSuperAdmin);
 
-// ── GET /admin/users — list all users (including super admins) ────────────────
+const GETI_DOMAIN = '@geti.education';
+
+const userSelect = {
+  id: true, email: true, name: true, role: true, status: true,
+  mustChangePassword: true, createdAt: true,
+  projectMemberships: { select: { id: true, projectId: true, role: true } },
+  linkedNames: { select: { id: true, name: true } },
+} as const;
+
+// ── GET /admin/users ──────────────────────────────────────────────────────────
+// Returns only @geti.education email users + unlinked UNCLAIMED name-stubs
 adminRouter.get('/users', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const workspaceId = req.query['workspaceId'] as string | undefined;
 
-    const users = await prisma.user.findMany({
-      where: workspaceId
-        ? { memberships: { some: { workspaceId } } }
-        : {},
-      select: {
-        id: true, email: true, name: true, role: true, status: true,
-        mustChangePassword: true, createdAt: true,
-        projectMemberships: { select: { id: true, projectId: true, role: true } },
+    const baseWhere = workspaceId
+      ? { memberships: { some: { workspaceId } } }
+      : {};
+
+    const emailUsers = await prisma.user.findMany({
+      where: {
+        ...baseWhere,
+        email: { endsWith: GETI_DOMAIN },
       },
+      select: userSelect,
+      orderBy: [{ status: 'asc' }, { email: 'asc' }],
+    });
+
+    // UNCLAIMED name-stubs with no email and not yet linked to anyone
+    const unlinkedNames = await prisma.user.findMany({
+      where: {
+        ...baseWhere,
+        email: null,
+        linkedToId: null,
+      },
+      select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
 
-    res.json({ data: users });
+    res.json({ data: emailUsers, unlinkedNames });
   } catch (e) { next(e); }
 });
+
+// ── POST /admin/users — create a placeholder user with just an email ──────────
+adminRouter.post(
+  '/users',
+  validate(z.object({
+    email: z.string().email().refine((e) => e.endsWith(GETI_DOMAIN), {
+      message: 'Only @geti.education emails are allowed',
+    }),
+    workspaceId: z.string(),
+  })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email, workspaceId } = req.body as { email: string; workspaceId: string };
+
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing) throw new AppError('CONFLICT', 'This email already exists in the system', 409);
+
+      if (!env.DEFAULT_MEMBER_PASSWORD) {
+        throw new AppError('INTERNAL', 'DEFAULT_MEMBER_PASSWORD is not configured', 500);
+      }
+
+      const passwordHash = await hashPassword(env.DEFAULT_MEMBER_PASSWORD);
+      // Derive a display name from the email local part
+      const localPart = email.split('@')[0] ?? email;
+      const name = localPart
+        .replace(/[._-]+/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+      const user = await prisma.user.create({
+        data: {
+          email,
+          name,
+          passwordHash,
+          role: 'MEMBER',
+          status: 'UNCLAIMED',
+          mustChangePassword: true,
+          memberships: { create: { workspaceId, role: 'MEMBER' } },
+        },
+        select: userSelect,
+      });
+
+      res.status(201).json(user);
+    } catch (e) { next(e); }
+  },
+);
+
+// ── POST /admin/users/:userId/link — attach an UNCLAIMED name-stub ────────────
+adminRouter.post(
+  '/users/:userId/link',
+  validate(z.object({ nameUserId: z.string() })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = req.params as { userId: string };
+      const { nameUserId } = req.body as { nameUserId: string };
+
+      const nameUser = await prisma.user.findUnique({ where: { id: nameUserId } });
+      if (!nameUser) throw new NotFoundError('Name user');
+      if (nameUser.email !== null) {
+        throw new AppError('BAD_REQUEST', 'Can only link UNCLAIMED name-stubs (no email)', 400);
+      }
+
+      await prisma.user.update({
+        where: { id: nameUserId },
+        data: { linkedToId: userId },
+      });
+
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  },
+);
+
+// ── DELETE /admin/users/:userId/unlink/:nameId — remove a name link ───────────
+adminRouter.delete(
+  '/users/:userId/unlink/:nameId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { nameId } = req.params as { userId: string; nameId: string };
+
+      const nameUser = await prisma.user.findUnique({ where: { id: nameId } });
+      if (!nameUser) throw new NotFoundError('Name user');
+
+      await prisma.user.update({
+        where: { id: nameId },
+        data: { linkedToId: null },
+      });
+
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  },
+);
 
 // ── PATCH /admin/users/:userId/lead — promote/demote project lead ─────────────
 adminRouter.patch(
@@ -60,7 +172,6 @@ adminRouter.patch(
         create: { projectId, userId, role, hoursPerDay: 6 },
       });
 
-      // Resolve workspaceId for audit log
       const wsMembership = await prisma.workspaceMember.findFirst({
         where: { userId },
         select: { workspaceId: true },
@@ -126,7 +237,7 @@ adminRouter.patch(
   },
 );
 
-// ── POST /admin/users/:userId/reset-password — reset to default password ──────
+// ── POST /admin/users/:userId/reset-password ──────────────────────────────────
 adminRouter.post('/users/:userId/reset-password', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params as { userId: string };
@@ -146,7 +257,6 @@ adminRouter.post('/users/:userId/reset-password', async (req: Request, res: Resp
         where: { id: userId },
         data: { passwordHash, mustChangePassword: true },
       }),
-      // Revoke all active refresh tokens
       prisma.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
