@@ -91,7 +91,7 @@ function UserRow({
   const isLead = pm?.role === 'LEAD';
   const isSa = user.role === 'SUPER_ADMIN';
   const isDeactivated = user.status === 'DEACTIVATED';
-  const isPending = user.status === 'UNCLAIMED';
+  const isPending = user.mustChangePassword && !isDeactivated && !isSa;
 
   return (
     <div className={`rounded-xl border bg-white px-4 py-3 transition-colors ${isDeactivated ? 'border-slate-100 opacity-60' : 'border-slate-200'}`}>
@@ -110,9 +110,9 @@ function UserRow({
                 SUPER ADMIN
               </span>
             )}
-            {isPending && !isSa && (
+            {isPending && (
               <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700">
-                NOT YET SIGNED IN
+                TEMP PW
               </span>
             )}
             {isDeactivated && (

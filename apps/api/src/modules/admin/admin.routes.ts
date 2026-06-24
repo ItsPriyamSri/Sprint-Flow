@@ -5,7 +5,7 @@ import { validate } from '../../middleware/validate';
 import { prisma } from '../../lib/prisma';
 import { hashPassword } from '../../lib/password';
 import { env } from '../../lib/env';
-import { NotFoundError, AppError } from '../../lib/errors';
+import { NotFoundError, AppError, ConflictError } from '../../lib/errors';
 import type { Prisma } from '@sprintflow/db';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -69,7 +69,7 @@ adminRouter.post(
       const { email, workspaceId } = req.body as { email: string; workspaceId: string };
 
       const existing = await prisma.user.findUnique({ where: { email } });
-      if (existing) throw new AppError('CONFLICT', 'This email already exists in the system', 409);
+      if (existing) throw new ConflictError('This email already exists in the system');
 
       if (!env.DEFAULT_MEMBER_PASSWORD) {
         throw new AppError('INTERNAL', 'DEFAULT_MEMBER_PASSWORD is not configured', 500);
@@ -88,7 +88,7 @@ adminRouter.post(
           name,
           passwordHash,
           role: 'MEMBER',
-          status: 'UNCLAIMED',
+          status: 'ACTIVE',
           mustChangePassword: true,
           memberships: { create: { workspaceId, role: 'MEMBER' } },
         },
