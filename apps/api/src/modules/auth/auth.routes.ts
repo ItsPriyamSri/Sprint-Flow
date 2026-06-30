@@ -2,13 +2,14 @@ import { Router, type IRouter } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { validate } from '../../middleware/validate';
 import { requireAuth } from '../../middleware/auth';
+import { env } from '../../lib/env';
 import { LoginSchema } from '@sprintflow/shared';
 import { z } from 'zod';
 import * as ctrl from './auth.controller';
 
 const loginLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10,
+  windowMs: env.LOGIN_RATE_LIMIT_WINDOW_MS,
+  max: env.LOGIN_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: { code: 'TOO_MANY_REQUESTS', message: 'Too many login attempts — try again in a minute' } },

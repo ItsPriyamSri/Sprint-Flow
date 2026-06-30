@@ -38,7 +38,7 @@ export function createApp(): Express {
   app.use(cors({ origin: env.CORS_ORIGINS, credentials: true }));
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
-  app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false }));
+  app.use(rateLimit({ windowMs: env.RATE_LIMIT_WINDOW_MS, max: env.RATE_LIMIT_MAX, standardHeaders: true, legacyHeaders: false }));
 
   app.use('/api/v1/health',     healthRouter);
   app.use('/api/v1/auth',       authRouter);

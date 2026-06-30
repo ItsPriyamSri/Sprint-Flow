@@ -32,6 +32,12 @@ export const env = {
   STORAGE_DRIVER: storageDriver,
   STORAGE_LOCAL_DIR: opt('STORAGE_LOCAL_DIR', './storage'),
   STORAGE_MAX_FILE_SIZE_MB: parseInt(opt('STORAGE_MAX_FILE_SIZE_MB', '20'), 10),
+  // Rate limiting — defaults match production hardening. Raise these (e.g. via Railway
+  // env vars) during a load test, then revert. Per-IP; `trust proxy` resolves real client IP.
+  RATE_LIMIT_WINDOW_MS: parseInt(opt('RATE_LIMIT_WINDOW_MS', String(15 * 60 * 1000)), 10),
+  RATE_LIMIT_MAX: parseInt(opt('RATE_LIMIT_MAX', '500'), 10),
+  LOGIN_RATE_LIMIT_WINDOW_MS: parseInt(opt('LOGIN_RATE_LIMIT_WINDOW_MS', String(60 * 1000)), 10),
+  LOGIN_RATE_LIMIT_MAX: parseInt(opt('LOGIN_RATE_LIMIT_MAX', '10'), 10),
   // S3 — only required when STORAGE_DRIVER=s3
   S3_BUCKET: process.env['S3_BUCKET'] ?? '',
   S3_REGION: process.env['S3_REGION'] ?? '',
