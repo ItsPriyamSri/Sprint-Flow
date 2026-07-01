@@ -58,6 +58,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (mustChangePassword) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar workspace={workspace ?? null} />
