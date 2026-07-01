@@ -61,65 +61,20 @@ async function jitProvision(email: string, password: string) {
   // JIT only triggers when the user supplies the default password
   if (password !== env.DEFAULT_MEMBER_PASSWORD) return null;
 
-  // Resolve workspace to join
-  let workspaceId: string | null = null;
-  if (env.DEFAULT_WORKSPACE_SLUG) {
-    const ws = await prisma.workspace.findUnique({ where: { slug: env.DEFAULT_WORKSPACE_SLUG } });
-    workspaceId = ws?.id ?? null;
-  }
-  if (!workspaceId) {
-    const ws = await prisma.workspace.findFirst({ orderBy: { createdAt: 'asc' } });
-    workspaceId = ws?.id ?? null;
-  }
-  if (!workspaceId) return null;
-
   const passwordHash = await hashPassword(env.DEFAULT_MEMBER_PASSWORD);
   const name = deriveNameFromEmail(email);
-  const wsId = workspaceId;
 
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email,
-        name,
-        passwordHash,
-        status: 'ACTIVE',
-        role: 'MEMBER',
-        mustChangePassword: true,
-      },
-    });
-
-    await tx.workspaceMember.create({
-      data: { userId: user.id, workspaceId: wsId, role: 'MEMBER' },
-    });
-
-    if (env.DEFAULT_PROJECT_ID) {
-      const project = await tx.project.findUnique({ where: { id: env.DEFAULT_PROJECT_ID } });
-      if (project && project.workspaceId === wsId) {
-        await tx.projectMember.upsert({
-          where: { projectId_userId: { projectId: env.DEFAULT_PROJECT_ID, userId: user.id } },
-          update: {},
-          create: {
-            projectId: env.DEFAULT_PROJECT_ID,
-            userId: user.id,
-            role: 'MEMBER',
-            hoursPerDay: 6,
-          },
-        });
-      }
-    }
-
-    await tx.activityLog.create({
-      data: {
-        workspaceId: wsId,
-        actorId: user.id,
-        action: 'USER_PROVISIONED',
-        entityType: 'user',
-        entityId: user.id,
-      },
-    });
-
-    return user;
+  // Create the user account but do NOT auto-join any workspace.
+  // Team leads will add them to the appropriate team via the Team Dashboard.
+  return prisma.user.create({
+    data: {
+      email,
+      name,
+      passwordHash,
+      status: 'ACTIVE',
+      role: 'MEMBER',
+      mustChangePassword: true,
+    },
   });
 }
 

@@ -140,11 +140,13 @@ model UserPreference {
 // ─── Workspaces ──────────────────────────────────────────────────────────────
 
 model Workspace {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   members      WorkspaceMember[]
   projects     Project[]

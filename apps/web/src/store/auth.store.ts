@@ -22,10 +22,15 @@ interface AuthState {
   user: AuthUser | null;
   defaultWorkspaceId: string | null;
   defaultBoardId: string | null;
+  /** The workspace the user is currently viewing — persisted across sessions */
+  activeWorkspaceId: string | null;
+  /** The caller's role in the active workspace */
+  activeWorkspaceRole: string | null;
   /** Set after zustand persist finishes reading localStorage */
   _hasHydrated: boolean;
   setAuth: (token: string, user: AuthUser) => void;
   setToken: (token: string) => void;
+  setActiveWorkspace: (workspaceId: string, role: string) => void;
   clearAuth: () => void;
   isAuthenticated: () => boolean;
 }
@@ -37,6 +42,8 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       defaultWorkspaceId: null,
       defaultBoardId: null,
+      activeWorkspaceId: null,
+      activeWorkspaceRole: null,
       _hasHydrated: false,
 
       setAuth: (accessToken, user) => {
@@ -51,8 +58,18 @@ export const useAuthStore = create<AuthState>()(
 
       setToken: (accessToken) => set({ accessToken }),
 
+      setActiveWorkspace: (workspaceId, role) =>
+        set({ activeWorkspaceId: workspaceId, activeWorkspaceRole: role }),
+
       clearAuth: () =>
-        set({ accessToken: null, user: null, defaultWorkspaceId: null, defaultBoardId: null }),
+        set({
+          accessToken: null,
+          user: null,
+          defaultWorkspaceId: null,
+          defaultBoardId: null,
+          activeWorkspaceId: null,
+          activeWorkspaceRole: null,
+        }),
 
       isAuthenticated: () => !!get().accessToken,
     }),
@@ -67,6 +84,8 @@ export const useAuthStore = create<AuthState>()(
         user: s.user,
         defaultWorkspaceId: s.defaultWorkspaceId,
         defaultBoardId: s.defaultBoardId,
+        activeWorkspaceId: s.activeWorkspaceId,
+        activeWorkspaceRole: s.activeWorkspaceRole,
       }),
     },
   ),

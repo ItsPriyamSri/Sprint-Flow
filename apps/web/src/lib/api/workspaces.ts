@@ -1,10 +1,19 @@
 import { apiFetch } from './client';
 import type { ProjectDto } from './projects';
 
+export interface TeamSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  role: string;
+}
+
 export interface WorkspaceInfo {
   id: string;
   name: string;
   slug: string;
+  description: string | null;
   role: string;
   boards: Array<{ id: string; name: string }>;
   sprints: Array<{
@@ -15,6 +24,14 @@ export interface WorkspaceInfo {
   projects: ProjectDto[];
 }
 
+export async function listMyTeams(): Promise<TeamSummary[]> {
+  return apiFetch('/workspaces');
+}
+
 export async function getMyWorkspace(): Promise<WorkspaceInfo> {
   return apiFetch('/workspaces/mine');
+}
+
+export async function hydrateTeam(workspaceId: string): Promise<WorkspaceInfo> {
+  return apiFetch(`/workspaces/${encodeURIComponent(workspaceId)}/hydrate`);
 }

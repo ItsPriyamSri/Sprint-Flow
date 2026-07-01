@@ -38,7 +38,7 @@ export const errorHandler: ErrorRequestHandler = (
       res.status(422).json({
         error: {
           code: 'INVALID_REFERENCE',
-          message: 'Import could not link hours to a project member. Ensure owners in the sheet match project members (Nate, Iris, etc.).',
+          message: 'Import could not link hours to a project member. Ensure owner names in the sheet are linked to team member accounts (via Team Dashboard → name linking).',
         },
       });
       return;

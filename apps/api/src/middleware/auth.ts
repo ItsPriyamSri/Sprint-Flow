@@ -3,6 +3,32 @@ import { verifyAccessToken } from '../lib/jwt';
 import { getWorkspaceMembership, hasWorkspaceRole } from '../lib/rbac';
 import { UnauthorizedError, ForbiddenError } from '../lib/errors';
 
+// ── Team admin guard ──────────────────────────────────────────────────────────
+// Allows SUPER_ADMIN (always), or workspace OWNER/ADMIN for the target workspace.
+// Reads workspaceId from req.params.teamId || req.params.workspaceId || req.body.workspaceId || req.query.workspaceId.
+export function requireTeamAdmin(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user) return next(new UnauthorizedError());
+  if (req.user.role === 'SUPER_ADMIN') return next();
+
+  const workspaceId =
+    (req.params as Record<string, string>)['teamId'] ??
+    (req.params as Record<string, string>)['workspaceId'] ??
+    (req.body as Record<string, unknown> | undefined)?.['workspaceId'] ??
+    (req.query as Record<string, string>)['workspaceId'];
+
+  if (!workspaceId) return next(new ForbiddenError('Team ID required'));
+
+  getWorkspaceMembership(req.user.id, workspaceId as string)
+    .then((membership) => {
+      if (!membership) return next(new ForbiddenError('Not a member of this team'));
+      if (!hasWorkspaceRole(membership.role, 'ADMIN')) {
+        return next(new ForbiddenError('Requires team lead (Admin/Owner) role'));
+      }
+      next();
+    })
+    .catch(next);
+}
+
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {

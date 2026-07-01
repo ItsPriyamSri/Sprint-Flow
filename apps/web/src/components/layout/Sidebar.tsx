@@ -10,7 +10,7 @@ import { useProjectStore } from '@/store/project.store';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SprintCreateModal } from '@/components/scrum/SprintCreateModal';
 import { confirmDeleteProject, confirmDeleteSprint } from '@/lib/deleteActions';
-import type { WorkspaceInfo } from '@/lib/api/workspaces';
+import type { WorkspaceInfo, TeamSummary } from '@/lib/api/workspaces';
 
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
@@ -25,19 +25,23 @@ export { PRIORITY_COLORS };
 
 interface Props {
   workspace: WorkspaceInfo | null;
+  teams: TeamSummary[];
 }
 
-export function Sidebar({ workspace }: Props) {
+export function Sidebar({ workspace, teams }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
+  const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
   const { activeProject, setActiveProject, clearProject } = useProjectStore();
-  const { isSuperAdmin, isLead } = usePermissions();
-  const isLeadOrAdmin = isSuperAdmin || (activeProject ? isLead(activeProject.id) : false);
+  const { isSuperAdmin, isTeamLead, isLead } = usePermissions();
+  const isLeadOrAdmin = isSuperAdmin || isTeamLead || (activeProject ? isLead(activeProject.id) : false);
   const [sprintsOpen, setSprintsOpen] = useState(true);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [teamMenuOpen, setTeamMenuOpen] = useState(false);
   const [createSprintOpen, setCreateSprintOpen] = useState(false);
 
   const handleSignOut = () => {
@@ -47,6 +51,8 @@ export function Sidebar({ workspace }: Props) {
 
   const projects = workspace?.projects ?? [];
   const currentProjectSprints = activeProject?.sprints ?? [];
+  const showTeamSwitcher = teams.length > 1 || isSuperAdmin;
+  const activeTeam = teams.find((t) => t.id === activeWorkspaceId) ?? teams[0];
 
   const isActive = (href: string) => pathname === href;
 
@@ -57,6 +63,14 @@ export function Sidebar({ workspace }: Props) {
         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
     }`;
 
+  const handleSwitchTeam = (team: TeamSummary) => {
+    setActiveWorkspace(team.id, team.role);
+    clearProject();
+    queryClient.invalidateQueries({ queryKey: ['workspace'] });
+    setTeamMenuOpen(false);
+    router.push('/overview');
+  };
+
   return (
     <aside className="flex w-56 flex-shrink-0 flex-col border-r border-slate-200 bg-white">
       {/* Logo */}
@@ -64,6 +78,64 @@ export function Sidebar({ workspace }: Props) {
         <Image src="/logo.png" alt="SprintFlow" width={28} height={28} className="flex-shrink-0" priority />
         <span className="font-bold tracking-tight text-slate-900">SprintFlow</span>
       </div>
+
+      {/* Team switcher (visible when user belongs to >1 team, or is super admin) */}
+      {showTeamSwitcher && (
+        <div className="relative border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+          <button
+            onClick={() => setTeamMenuOpen((o) => !o)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-slate-100"
+          >
+            <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-violet-100 text-[9px] font-bold text-violet-700">
+              {initials(activeTeam?.name ?? 'T')}
+            </div>
+            <span className="min-w-0 flex-1 truncate text-slate-600 font-medium">
+              {activeTeam?.name ?? 'Select team'}
+            </span>
+            <svg className="h-3 w-3 flex-shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {teamMenuOpen && (
+            <div className="absolute left-3 right-3 top-full z-50 mt-1 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+              <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Switch Team</p>
+              {teams.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => handleSwitchTeam(t)}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${t.id === activeWorkspaceId ? 'font-medium text-violet-700' : 'text-slate-700'}`}
+                >
+                  <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-violet-100 text-[9px] font-bold text-violet-700">
+                    {initials(t.name)}
+                  </div>
+                  <span className="min-w-0 flex-1 truncate">{t.name}</span>
+                  {t.id === activeWorkspaceId && (
+                    <svg className="h-3.5 w-3.5 flex-shrink-0 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+              {isSuperAdmin && (
+                <>
+                  <div className="mx-2 my-1 border-t border-slate-100" />
+                  <Link
+                    href="/settings/admin"
+                    onClick={() => setTeamMenuOpen(false)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-violet-600 hover:bg-violet-50"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Manage teams
+                  </Link>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Project switcher */}
       {projects.length > 0 && (
@@ -98,7 +170,7 @@ export function Sidebar({ workspace }: Props) {
                 </button>
               ))}
               <div className="mx-2 my-1 border-t border-slate-100" />
-              {isSuperAdmin && (
+              {isLeadOrAdmin && (
                 <Link
                   href="/onboarding"
                   onClick={() => setProjectMenuOpen(false)}
@@ -122,7 +194,7 @@ export function Sidebar({ workspace }: Props) {
                   Import from sheet
                 </Link>
               )}
-              {activeProject && projects.length > 0 && (
+              {activeProject && projects.length > 0 && isLeadOrAdmin && (
                 <button
                   type="button"
                   onClick={async () => {
@@ -222,30 +294,32 @@ export function Sidebar({ workspace }: Props) {
                         <span className="ml-auto flex-shrink-0 rounded bg-indigo-100 px-1 text-[9px] font-bold text-indigo-600">R</span>
                       )}
                     </Link>
-                    <button
-                      type="button"
-                      title={`Delete ${s.name}`}
-                      onClick={async (e) => {
-                        e.preventDefault();
-                        const deleted = await confirmDeleteSprint({
-                          sprintId: s.id,
-                          sprintName: s.name,
-                          workspaceId: workspace?.id ?? '',
-                          projectId: activeProject?.id,
-                          queryClient,
-                          onDeleted: () => {
-                            if (isActive(href)) router.push('/overview');
-                          },
-                        });
-                        if (deleted && isActive(href)) router.push('/overview');
-                      }}
-                      className="rounded p-0.5 text-slate-300 opacity-0 hover:bg-rose-50 hover:text-rose-600 group-hover/sprint:opacity-100 transition-all"
-                    >
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    {isLeadOrAdmin && (
+                      <button
+                        type="button"
+                        title={`Delete ${s.name}`}
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          const deleted = await confirmDeleteSprint({
+                            sprintId: s.id,
+                            sprintName: s.name,
+                            workspaceId: workspace?.id ?? '',
+                            projectId: activeProject?.id,
+                            queryClient,
+                            onDeleted: () => {
+                              if (isActive(href)) router.push('/overview');
+                            },
+                          });
+                          if (deleted && isActive(href)) router.push('/overview');
+                        }}
+                        className="rounded p-0.5 text-slate-300 opacity-0 hover:bg-rose-50 hover:text-rose-600 group-hover/sprint:opacity-100 transition-all"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -256,7 +330,7 @@ export function Sidebar({ workspace }: Props) {
             <p className="ml-9 mt-1 text-xs text-slate-400">No sprints yet</p>
           )}
 
-          {sprintsOpen && activeProject && (
+          {sprintsOpen && activeProject && isLeadOrAdmin && (
             <button
               onClick={() => setCreateSprintOpen(true)}
               className="ml-6 mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-50/50 hover:text-indigo-700 transition-colors"
@@ -319,6 +393,18 @@ export function Sidebar({ workspace }: Props) {
           Flow view
         </Link>
 
+        {/* Team Dashboard — visible to team leads */}
+        {isTeamLead && !isSuperAdmin && (
+          <Link href="/settings/team" className={navLinkCls('/settings/team')}>
+            <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Team Dashboard
+          </Link>
+        )}
+
+        {/* Admin Settings — super admin only */}
         {isSuperAdmin && (
           <Link href="/settings/admin" className={navLinkCls('/settings/admin')}>
             <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
